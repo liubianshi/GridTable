@@ -37,6 +37,16 @@ SYMBOL <- list(VERTICE = "+",
     r1
 }
 
+
+table_row <- function(row) {
+    if (row$n != 0 && col_no(row$nodes[[1]]) != 1) {
+        empty_row(row$row_no, 1, col_no(row$nodes[[1]])) + row
+    } else {
+        row
+    }
+}
+
+
 `+.Table` <- function(t1, t2) {
     if (is.null(t1)) return(t2)
     if (is.null(t2)) return(t1)
@@ -46,17 +56,18 @@ SYMBOL <- list(VERTICE = "+",
     new_rows <- purrr::map(
         seq_len(t1$length),
         \(.x) {
-            if (.x <= t2$length) t1$rows[[.x]] + t2$rows[[.x]]
-            else                 t1$rows[[.x]]
+            if (.x <= t2$length) table_row(t1$rows[[.x]] + t2$rows[[.x]])
+            else                 table_row(t1$rows[[.x]])
         }
     )
+    
     do.call(Table, new_rows)
 }
 
 `%between%` <- function(x, a) x >= a[1] & x <= a[2]
 
 #' @export
-bind_cell <- function(table, row_range = NULL, col_range = NULL, cancel = NULL) {
+bind_cell <- function(table, row_range = NULL, col_range = NULL, cancel = NULL, ...) {
     oldattrs <- attr(table, "merged_cells")
     old_merged_cell_names <- names(oldattrs)
 
@@ -81,6 +92,7 @@ bind_cell <- function(table, row_range = NULL, col_range = NULL, cancel = NULL) 
     merged_cell <- valid_merged_cell(list(rows = row_range,
                                           cols = col_range),
                                      table)
+    merged_cell <- c(merged_cell, list(...))
     merged_cell_name <-
         merged_cell |>
         purrr::map_chr(\(x) paste(unique(x), collapse = ":")) |>
@@ -103,20 +115,24 @@ cal_column_width <- function(x) {
         max()
 }
 
-Cell <- function(table, i, j, drop_content = FALSE) {
+Cell <- function(table, i, j) {
     stopifnot(inherits(table, "GridTable"))
     stopifnot(length(i) == 1 && length(j) == 1)
+    i <- toInteger(i)
+    j <- toInteger(j)
+    drop_content <- FALSE
+    middle <- FALSE
 
     in_merged_cell <- function(i, j, m) i %between% m$rows && j %between% m$cols
     first_cell_in_merged_cell <- function(i, j, m) i == m$rows[1] && j == m$cols[1]
 
-    i <- toInteger(i)
-    j <- toInteger(j)
 
     for (merged_cell in attr(table, "merged_cells")) {
         if (first_cell_in_merged_cell(i, j, merged_cell)) {
             i <- merged_cell$rows[1]:merged_cell$rows[2]
             j <- merged_cell$cols[1]:merged_cell$cols[2]
+            drop_content <- merged_cell$drop_content
+            middle <- merged_cell$middle
             break
         } else if (in_merged_cell(i, j, merged_cell)) {
             return(NULL)
@@ -146,6 +162,9 @@ Cell <- function(table, i, j, drop_content = FALSE) {
     if (length(content) > rownums - 2)
         content[rownums - 2] <- paste(content[(rownums - 2):length(content)],
                                       collapse = " ")
+    if (isTRUE(middle)) {
+        content <- c(rep("", (rownums - 2 - length(content)) / 2), content)
+    }
     if (max(purrr::map_int(content, stringr::str_width)) > colnums - 4) {
         stop(gettextf("Width of column %s is too small",
                       paste(j, collapse = ",")), call. = FALSE)
@@ -388,19 +407,28 @@ is_overlaped <- function(x, y) {
 }
 
 #' @export
-print.GridTable <- function(gtable, drop_content = FALSE) {
+print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
     rownum <- nrow(gtable)
     colnum <- ncol(gtable)
-    purrr::map(seq_len(rownum), \(i) {
-        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j, drop_content = FALSE)) |>
-        purrr::reduce(`+.Table`)
-    }) |>
-    purrr::reduce(`+.Table`)
+    Table <- Cell(gtable, 1, 1) 
+    for (i in seq_len(rownum)) {
+        for (j in seq_len(colnum)) {
+            if (i == 1 && j == 1) next
+            Table <- Table + Cell(gtable, i, j)
+        }
+    }
+    print(Table, drop_empty_line, ...)
+    invisible(Table)
 }
 
 #' @export
-print.Table <- function(table) {
-    purrr::walk(table$rows, ~  cat(toString(.x), "\n"))
+print.Table <- function(table, drop_empty_line = TRUE, ...) {
+    table_content <- purrr::map_chr(table$rows, ~ toString.Row(.x))
+    if (isTRUE(drop_empty_line)) {
+        table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
+    }
+    cat(table_content, sep = "\n")
+    invisible(table_content)
 }
 
 row_extend <- function(row, edge) {
@@ -443,17 +471,24 @@ row_update <- function(row, edge) {
     do.call(Row, new_row_edges)
 }
 
+empty_row <- function(row_no, left_col_no = NULL, right_col_no = NULL) {
+    stopifnot(is.null(left_col_no) == is.null(right_col_no))
+    if (is.null(left_col_no) || is.null(right_col_no)) {
+        return(structure(list(nodes = NULL,
+                              edges = NULL,
+                              n = 0,
+                              row_no = row_no),
+                              class = "Row"))
+    }
+    leftnode  <- Node(Coordinate(row_no, left_col_no),  SYMBOL$SIDE)
+    rightnode <- Node(Coordinate(row_no, right_col_no), SYMBOL$SIDE)
+    Row(Edge(leftnode, rightnode, " "))
+}
+
 Row <- function(..., row_no = NULL) {
     edges <- list(...)
     stopifnot(!(length(edges) == 0L && is.null(row_no)))
-    if (length(edges) == 0L) {
-        empty_row <- structure(list(nodes = NULL,
-                                    edges = NULL,
-                                    n = 0,
-                                    row_no = row_no),
-                               class = "Row")
-        return(empty_row)
-    }
+    if (length(edges) == 0L) return(empty_row(row_no))
 
     purrr::walk(edges, ~ stopifnot(class(.x) == "Edge"))
     edges <- local({
@@ -462,13 +497,16 @@ Row <- function(..., row_no = NULL) {
         purrr::map(seq_along(edges), ~ edges[[which(order(edge_no) == .x)]])
     })
 
-    nodes <- local({
-        n <- length(edges)
-        l <- purrr::map(edges, ~ .x$leftnode)
-        r <- purrr::map(edges, ~ .x$rightnode)
-        purrr::map2(l[-1], r[-n], ~ stopifnot(.x == .y && .x$symbol == .y$symbol))
-        c(l, r[n])
-    })
+    nodes <- vector("list", length(edges) + 1)
+    for (i in seq_along(edges)) {
+        if (i != 1) {
+            stopifnot(edges[[i]]$leftnode == edges[[i-1]]$rightnode)
+            edges[[i-1]]$rightnode <- node_merge(edges[[i]]$leftnode, edges[[i-1]]$rightnode)
+            edges[[i]]$leftnode    <- edges[[i-1]]$rightnode
+        }
+        if (i == length(edges)) nodes[[i+1]] = edges[[i]]$rightnode
+        nodes[[i]] = edges[[i]]$leftnode
+    }
     
     structure(list(nodes = nodes,
                    edges = edges,
