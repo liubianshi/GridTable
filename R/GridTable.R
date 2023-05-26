@@ -78,22 +78,17 @@ bind_cell <- function(table, row_range = NULL, col_range = NULL, cancel = NULL) 
         stop("Need to set both row_range and col_range", call. = FALSE)
     }
 
-    merged_cell <- check_merged_cell(list(rows = row_range, cols = col_range), table)
-    merged_cell_name <- local({
-        rowname <- if (merged_cell$rows[1] == merged_cell$rows[2])
-                        as.character(merged_cell$rows[1])
-                   else paste(merged_cell$rows, collapse = ":")
-        colname <- if (merged_cell$cols[1] == merged_cell$cols[2])
-                        as.character(merged_cell$cols[1])
-                   else paste(merged_cell$cols, collapse = ":")
-        gettextf("%s,%s", rowname, colname)
-    })
+    merged_cell <- valid_merged_cell(list(rows = row_range,
+                                          cols = col_range),
+                                     table)
+    merged_cell_name <-
+        merged_cell |>
+        purrr::map_chr(\(x) paste(unique(x), collapse = ":")) |>
+        paste(collapse = ",")
 
     purrr::walk(oldattrs, \(m1, m2) {
-        if ( length(intersect(m1$rows[1]:m1$rows[2], m2$rows[1]:m2$rows[2])) > 0 &&
-             length(intersect(m1$cols[1]:m1$cols[2], m2$cols[1]:m2$cols[2])) > 0 ) {
+        if (is_overlaped(m1$rows, m2$row) && is_overlaped(m1$cols, m2$cols))
             stop("There is overlap", call. = FALSE)
-        }
     }, m2 = merged_cell)
 
     newattrs <- c(oldattrs, list(merged_cell))
@@ -108,47 +103,59 @@ cal_column_width <- function(x) {
         max()
 }
 
-Cell <- function(table, i, j) {
+Cell <- function(table, i, j, drop_content = FALSE) {
     stopifnot(inherits(table, "GridTable"))
+    stopifnot(length(i) == 1 && length(j) == 1)
+
+    in_merged_cell <- function(i, j, m) i %between% m$rows && j %between% m$cols
+    first_cell_in_merged_cell <- function(i, j, m) i == m$rows[1] && j == m$cols[1]
+
     i <- toInteger(i)
     j <- toInteger(j)
+
     for (merged_cell in attr(table, "merged_cells")) {
-        if (i %between% merged_cell$rows && j %between% merged_cell$cols) {
-            if (i == merged_cell$rows[1] && j == merged_cell$cols[1]) {
-                i <- merged_cell$rows
-                j <- merged_cell$cols
-                break
-            } else {
-                return(NULL)
-            }
+        if (first_cell_in_merged_cell(i, j, merged_cell)) {
+            i <- merged_cell$rows[1]:merged_cell$rows[2]
+            j <- merged_cell$cols[1]:merged_cell$cols[2]
+            break
+        } else if (in_merged_cell(i, j, merged_cell)) {
+            return(NULL)
         }
     }
 
-    stopifnot(length(i) <= 2 && length(j) <= 2)
-    i <- if (length(i) == 1) i else i[1]:i[2]
-    j <- if (length(j) == 1) j else j[1]:j[2]
-
+    width     <- attr(table, "width")
+    colnums   <- sum(width[j] + 3) + 1
     rownums   <- length(i) * 2 + 1
-    colnums   <- sum(table$width[j] + 3) + 1
     start_row <- 2 * i[1] - 1
     end_row   <- start_row + rownums - 1
-    start_col <- if (j[1] == 1) 1 else sum(table$width[1:(j[1] - 1)] + 3) + 1
+    start_col <- if (j[1] == 1) 1 else sum(width[1:(j[1] - 1)] + 3) + 1
     end_col   <- start_col + colnums - 1
-    align     <- table$align[j[1]]
-    content   <- table$data[i, j, drop = FALSE] |>
-                 apply(2, paste, collapse = "\n") |>
-                 stringr::str_split("\n") |>
-                 unlist()
+    align     <- attr(table, "align")[j[1]]
 
+    content  <- 
+        if (isTRUE(drop_content)) {
+            table[i[1], j[1]]           |>
+            stringr::str_split("\n")         |>
+            unlist()
+        } else {
+            table[i, j, drop = FALSE]   |>
+            apply(2, paste, collapse = "\n") |>
+            stringr::str_split("\n")         |>
+            unlist()
+        }
     if (length(content) > rownums - 2)
         content[rownums - 2] <- paste(content[(rownums - 2):length(content)],
                                       collapse = " ")
+    if (max(purrr::map_int(content, stringr::str_width)) > colnums - 4) {
+        stop(gettextf("Width of column %s is too small",
+                      paste(j, collapse = ",")), call. = FALSE)
+    }
 
     rows <- purrr::map(start_row:end_row, \(rowno) {
         isBoundary   <- rowno %in% c(start_row, end_row)
-        isHeaderLine <- identical(rowno, 2L * table$header + 1L) && rowno == end_row
-        isFooterLine <- (identical(rowno, 2L * table$footer - 1L) && rowno == start_row) ||
-                        (identical(rowno, 2L * table$footer + 1L) && rowno == end_row)
+        isHeaderLine <- rowno == 2 *  attr(table, "header") + 1 && rowno == end_row
+        isFooterLine <- (rowno == 2 * attr(table, "footer") - 1 && rowno == start_row) ||
+                        (rowno == 2 * attr(table, "footer") + 1 && rowno == end_row)
         node_symbol  <- if (isBoundary) SYMBOL$VERTICE else SYMBOL$SIDE
         leftnode     <- Node(Coordinate(rowno, start_col), node_symbol)
         rightnode    <- Node(Coordinate(rowno, end_col),   node_symbol)
@@ -162,23 +169,27 @@ Cell <- function(table, i, j) {
     do.call(Table, rows)
 }
 
-check_merged_cell <- function(merged_cell, gridtable) {
-    nrow <- nrow(gridtable$data)
-    ncol <- ncol(gridtable$data)
+valid_merged_cell <- function(merged_cell, gridtable) {
     stopifnot(inherits(merged_cell, "list"))
     stopifnot(all(c("rows", "cols") %in% names(merged_cell)))
-    stopifnot(length(merged_cell$rows) <= 2 && length(merged_cell$cols) <= 2)
-    if (length(merged_cell$rows) == 1)
-        merged_cell$rows[2] <- merged_cell$rows[1]
-    if (length(merged_cell$cols) == 1)
-        merged_cell$cols[2] <- merged_cell$cols[1]
-    stopifnot(identical(order(c(1, merged_cell$rows, nrow)), 1:4))
-    stopifnot(identical(order(c(1, merged_cell$cols, ncol)), 1:4))
-    if (merged_cell$rows[1] < gridtable$header &&
-        merged_cell$rows[1] > gridtable$header) {
+
+    merged_cell <-
+        purrr::map(merged_cell[c("rows", "cols")], \(x) {
+            x <- toInteger(x)
+            m <- min(x, na.rm = TRUE)
+            M <- max(x, na.rm = TRUE)
+            if (length(x) > 2) stopifnot(identical(sort(x), m:M))
+            c(m, M)
+        })
+    stopifnot(all(merged_cell$rows %in% 1:nrow(gridtable)))
+    stopifnot(all(merged_cell$cols %in% 1:ncol(gridtable)))
+
+    if (merged_cell$rows[1] < attr(gridtable, "header") &&
+        merged_cell$rows[2] > attr(gridtable, "header")) {
         stop("Cannot Span header row", call. = FALSE)
     }
-    list(rows = merged_cell$rows, cols = merged_cell$cols)
+
+    merged_cell
 }
 
 col_no <- function(x) {
@@ -305,18 +316,14 @@ format_column <- function(x, digits = 3L, ...) {
     stringr::str_trim()
 }
 
-
-
-#' @export
-GridTable <- function(data, align = NULL, header = NULL, footer = NULL) {
-    if (!inherits(data, "data.frame")) data <- as.data.frame(data)
+valid_align <- function(data, align = NULL) {
     if (is.null(align)) {
-        align <-
+        align <- 
             purrr::map_chr(data, \(x) {
                 switch(class(x),
-                       character = "l",
-                       numeric = "r",
-                       stop("Weird Column", call. = FALSE))
+                    character = "l",
+                    numeric = "r",
+                    stop("Weird Column", call. = FALSE))
             })
     } else if (is.character(align)) {
         stopifnot(length(align) %in% c(1, length(data)))
@@ -326,20 +333,27 @@ GridTable <- function(data, align = NULL, header = NULL, footer = NULL) {
     } else {
         stop("align needed to be a character or character vector", call. = FALSE)
     }
+    align
+}
+
+#' @export
+GridTable <- function(data, align = NULL, header = NULL, footer = NULL) {
+    if (!inherits(data, "data.frame")) data <- as.data.frame(data)
+
+    align <- valid_align(data, align)
     data <- vapply(data, format_column, character(nrow(data)))
     if (is.null(header) || header == 0L) {
         data <- rbind(colnames(data), data)
         header <- 1L
     }
+    if (is.null(footer)) footer <- Inf
     width <- vapply(as.data.frame(data), cal_column_width, integer(1))
-    structure(
-        list(data         = data,
-             width        = width,
-             align        = align,
-             header       = header,
-             footer       = footer),
-        class        = "GridTable"
-    )
+    structure(data,
+              width  = width,
+              align  = align,
+              header = header,
+              footer = footer,
+              class  = "GridTable")
 }
 
 last_edge <- function(row) {
@@ -365,12 +379,20 @@ node_merge <- function(n1, n2) {
     return(n1)
 }
 
+is_overlaped <- function(x, y) {
+    stopifnot(length(x) == 2 && length(y) == 2)
+    get <- function(x, i) if (is.atomic(x))        x[i]     else x[[i]] 
+    min <- function(z)    if (get(z,1) < get(z,2)) get(z,1) else get(z,2)
+    max <- function(z)    if (get(z,1) < get(z,2)) get(z,2) else get(z,1)
+    !(min(x) > max(y) || min(y) > max(x))
+}
+
 #' @export
-print.GridTable <- function(gtable) {
-    rownum <- nrow(gtable$data)
-    colnum <- ncol(gtable$data)
+print.GridTable <- function(gtable, drop_content = FALSE) {
+    rownum <- nrow(gtable)
+    colnum <- ncol(gtable)
     purrr::map(seq_len(rownum), \(i) {
-        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j)) |>
+        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j, drop_content = FALSE)) |>
         purrr::reduce(`+.Table`)
     }) |>
     purrr::reduce(`+.Table`)
@@ -425,8 +447,10 @@ Row <- function(..., row_no = NULL) {
     edges <- list(...)
     stopifnot(!(length(edges) == 0L && is.null(row_no)))
     if (length(edges) == 0L) {
-        empty_row <- structure(list(nodes = NULL, edges = NULL,
-                                    n = 0, row_no = row_no),
+        empty_row <- structure(list(nodes = NULL,
+                                    edges = NULL,
+                                    n = 0,
+                                    row_no = row_no),
                                class = "Row")
         return(empty_row)
     }
@@ -450,6 +474,54 @@ Row <- function(..., row_no = NULL) {
                    edges = edges,
                    n = length(nodes),
                    row_no = row_no(edges[[1]])), class = "Row")
+}
+
+parse_number_adjust <- function(num, x) {
+    stopifnot(is.character(x))
+    if (!is.atomic(x)) {
+        x <- purrr::imap_chr(x, \(val,name) gettextf("%s%s", name, val))
+    }
+    x <- stringr::str_to_upper(x)
+
+    if (length(x) > 1) {
+        return(parse_number_adjust(parse_number_adjust(num, x[1]), x[-1]))
+    }
+
+    elements <- stringr::str_match(x, "^([A-Z]+)([-+*/=]?)([0-9]+)")[1, ]
+    if (is.na(elements[1])) return(NULL) else elements <- elements[2:4]
+
+    index <- which(LETTERS == stringr::str_split(elements[1], "")[[1]]) |> sum()
+    stopifnot(index <= length(num))
+    operand <- as.integer(elements[3])
+    operator <- if (is.na(elements[2])) "=" else elements[2]
+    switch(operator,
+        `=` = { num[index] <- operand },
+        `+` = { num[index] <- num[index] + operand },
+        `-` = { num[index] <- num[index] - operand },
+        `*` = { num[index] <- num[index] * operand },
+        `/` = { num[index] <- as.integer(num[index] / operand) },
+        default = stop("+-*/= or omit", call. = FALSE)
+    )
+    num
+}
+
+
+#' @export
+set_attr <- function(table, attr, value) {
+    stopifnot(inherits(table, "GridTable"))
+    switch(attr,
+        align = data.table::setattr(table, "align", valid_align(table, value)),
+        width = {
+            if (is.numeric(value)) {
+                stopifnot(length(value) != length(table))
+                width <- value
+            } else {
+                width <- parse_number_adjust(attr(table, "width"), value)
+            }
+            data.table::setattr(table, "width", width)
+        },
+        default = data.table::setattr(table, attr, value)
+    )
 }
 
 Table <- function(...) {

@@ -21,3 +21,28 @@ t5 <- Cell(gridt, 2L, 3L)
 t6 <- Cell(gridt, 3L, 2L)
 t7 <- Cell(gridt, 4L, 2L)
 
+dt <- data.table::fread("
+Location            | Temperature 1961-1990 ||
+                    | in degree Celsius     ||
+                    | min   | mean  | max   
+Antarctica          | -89.2 | N/A   | 19.8  
+Earth               | -89.2 | 14    | 56.7  
+", sep = "|")
+
+gdt <- GridTable(dt, header = 3, align = "lrrr") |>
+    bind_cell(c(1,3), 1) |>
+    bind_cell(c(1,2), c(2,4))
+
+set_attr(gdt, "width", "B/2")
+set_attr(gdt, "width", "B*2")
+
+
+bind_cell(gdt, 1:2, )
+
+print(gdt)
+
+bind_cell(gdt)
+
+str(dt)
+Cell(gdt, 1, 3)
+
