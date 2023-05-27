@@ -211,6 +211,72 @@ valid_merged_cell <- function(merged_cell, gridtable) {
     merged_cell
 }
 
+substr_width <- function(x, start, end) {
+    width     <- end - start + 1
+    pre_width <- start - 1
+
+    pre       <- substr(x, 1, start - 1)
+    while (start >= 0 && stringr::str_width(pre) > pre_width) {
+        start <- start - 1
+        end   <- end - 1
+        pre   <- substr(pre, 1, start - 1)
+        if (stringr::str_width(pre) < pre_width) {
+            stop("Start point cut character", call. = FALSE)
+        }
+    }
+
+    subs <- substr(x, start, end)
+    end  <- width
+    while (end >= 0 && stringr::str_width(subs) > width) {
+        end <- end - 1
+        subs <- substr(subs, 1, end)
+        if (stringr::str_width(subs) < width) {
+            stop("End point cut character", call. = FALSE)
+        }
+    }
+
+    subs
+}
+
+column_start_end_points <- function(line, sep = " ") {
+    line_width <- stringr::str_width(line)
+    sep_p <- which(stringr::str_split(line, "")[[1]] == sep)
+    if (length(sep_p) == 0) return(NULL)
+
+    keep <- purrr::map_lgl(seq_along(sep_p), \(x) {
+        if (x == 1) return(TRUE)
+        if (x == length(sep_p)) return(TRUE)
+        if (sep_p[x] - sep_p[x - 1] == 1 &&
+            sep_p[x + 1] - sep_p[x] == 1) return(FALSE)
+        return(TRUE)
+    })
+    sep_p <- sep_p[keep]
+    start_end_points <- purrr::map(seq_along(sep_p), \(i) {
+        if (i == 1) {
+            return(
+                if      (all(sep_p[1:2] == 1:2)) NULL
+                else if (sep_p[1] == 1)          2
+                else                             c(1, sep_p[1] - 1)
+            )
+        }
+        if (i == length(sep_p)) {
+            if (all(sep_p[length(sep_p) - 1:0] == line_width - 1:0)) {
+                return(NULL)
+            }
+            if (sep_p[length(sep_p)] == line_width) {
+                return(line_width - 1)
+            }
+            return(c(sep_p[length(sep_p)] + 1, line_width))
+        }
+
+        if (sep_p[i] == sep_p[i-1] + 1) return(sep_p[i] + 1)
+        if (sep_p[i] == sep_p[i+1] - 1) return(sep_p[i] - 1)
+        return(c(sep_p[i] - 1, sep_p[i] + 1))
+    }) |> unlist()
+    purrr::map(seq_len(length(start_end_points)/2),
+               \(i) start_end_points[2*i - 1:0])
+}
+
 col_no <- function(x) {
     switch(class(x),
         Coordinate = x[2],
@@ -356,7 +422,7 @@ valid_align <- function(data, align = NULL) {
 }
 
 #' @export
-GridTable <- function(data, align = NULL, header = NULL, footer = NULL) {
+GridTable <- function(data, align = NULL, header = NULL, footer = NULL, ...) {
     if (!inherits(data, "data.frame")) data <- as.data.frame(data)
 
     align <- valid_align(data, align)
@@ -372,7 +438,7 @@ GridTable <- function(data, align = NULL, header = NULL, footer = NULL) {
               align  = align,
               header = header,
               footer = footer,
-              class  = "GridTable")
+              class  = "GridTable", ...)
 }
 
 last_edge <- function(row) {
@@ -417,6 +483,10 @@ print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
             Table <- Table + Cell(gtable, i, j)
         }
     }
+    if (!is.null(attr(gtable, "capture"))) {
+        cat(attr(gtable, "capture"), "\n\n")
+    }
+
     print(Table, drop_empty_line, ...)
     invisible(Table)
 }
@@ -589,11 +659,12 @@ toInteger <- function(x) {
 toString.Edge <- function(edge) {
     symbol_l <- if (col_no(edge$leftnode) == 1L) edge$leftnode$symbol else ""
     symbol_r <- edge$rightnode$symbol
-    width <- col_no(edge$rightnode) - col_no(edge$leftnode) - 1
+    width    <- col_no(edge$rightnode) - col_no(edge$leftnode) - 1
     if (edge$type[1] == "Normal") {
-        content <- stringr::str_trim(edge$content)
-        return(gettextf(gettextf("%%s %%-%ds%%s", width - 1),
-                        symbol_l, content, symbol_r))
+        content   <- stringr::str_trim(edge$content)
+        space_num <- width - 1 - stringr::str_width(content)
+        content   <- paste0(" ", content, strrep(" ", space_num))
+        return(gettextf("%s%s%s", symbol_l, content, symbol_r))
     }
 
     if ((!is.null(edge$align)) && "HEADER" %in% edge$type ) {
@@ -611,12 +682,47 @@ toString.Edge <- function(edge) {
     return(gettextf("%s%s%s", symbol_l, strrep(edge$symbol, width), symbol_r))
 }
 
+#' @export
+simple_to_grid <- function(kbl, ...) {
+    stopifnot(inherits(kbl, "knitr_kable"))
+    format <- attr(kbl, "format")
+    stopifnot(format %in% c("simple", "pipe"))
 
+    if (grepl("^Table:", kbl[1])) {
+        capture <- kbl[1]
+        kbl     <- kbl[-(1:2)]
+    } else {
+        capture <- NULL
+    }
+    sep <- " "
+    if (format == "pipe") {
+        sepline <- kbl[2]
+        table   <- if (grepl("[^\\|\\s]", kbl[1], perl = TRUE)) kbl[-2] else kbl[-(1:2)]
+        sep     <-  "|"
+    } else if (grepl("[^\\-\\s]", kbl[length(kbl)], perl = TRUE)) {
+        sepline <- kbl[2]
+        table   <- kbl[-2]
+    } else {
+        sepline <- kbl[1]
+        table   <- kbl[-c(1, length(kbl))]
+    }
+
+    start_end_points <- column_start_end_points(sepline, sep)
+    stopifnot(!is.null(start_end_points))
+    data <- purrr::map(table, \(line) {
+        purrr::map_chr(start_end_points, \(x) substr_width(line, x[1], x[2]))
+    })
+    data <- do.call(rbind, data)
+
+    args <- list(...)
+    args$data <- data
+    if (is.null(args$header)) args$header = 1L
+    if (is.null(args$capture)) args$capture = capture
+    do.call(GridTable, args)
+}
 
 toString.Row <- function(row) {
     paste0(purrr::map_chr(row$edges, toString.Edge), collapse = "")
 }
-
-
 
 # vim: set fdm=expr:

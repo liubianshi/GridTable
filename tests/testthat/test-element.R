@@ -30,4 +30,31 @@ set_attr(gdt, "width", "B-3")
 
 print(gdt, drop_empty_line = TRUE)
 
+out <- file.path(Sys.getenv("NUTSTORE"),
+                            "论文/IIA 和国际直接投资/写作/iia_ma",
+                            "基本模型回归结果.Rds") |>
+        readRDS()
+out <- out$out
+
+start_end <- column_start_end_points(out[[3]])
+
+re <- purrr::map(out[4:39], \(line) {
+    purrr::map_chr(start_end, \(x) substr_width(line, x[1], x[2]))
+})
+
+simple <- knitr::kable(mtcars[1:4, 1:4], "pipe", col.names = NULL, caption = "test")
+
+simple_to_grid(out)
+
+str(simple)
+
+
+
+grepl(valid_regex, simple[2], perl = TRUE)
+    valid_regex <- paste0("^[\\s\\", sep, "\\", symbol, "]+$")
+
+gdt <-  do.call(rbind, re) |>
+        as.data.table() |>
+        GridTable(header = 2, align = "lrrrrrr")
+bind_cell(gdt, 1, 2:7)
 
