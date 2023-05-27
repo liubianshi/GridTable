@@ -25,6 +25,10 @@ gdt <- GridTable(dt, header = 3, align = "lrrr") |>
     bind_cell(c(1,2), c(2,4)) |>
     bind_cell(c(4,5), 2, drop_content = TRUE, middle = TRUE)
 
+toString.GridTable(gdt) %>% str()
+
+
+    str(gdt)
 set_attr(gdt, "width", "B/2")
 set_attr(gdt, "width", "B-3")
 

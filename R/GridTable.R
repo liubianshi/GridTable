@@ -154,7 +154,8 @@ Cell <- function(table, i, j) {
             stringr::str_split("\n")         |>
             unlist()
         } else {
-            table[i, j, drop = FALSE]   |>
+            table[i, j]   |>
+            as.matrix() |>
             apply(2, paste, collapse = "\n") |>
             stringr::str_split("\n")         |>
             unlist()
@@ -424,6 +425,7 @@ valid_align <- function(data, align = NULL) {
 #' @export
 GridTable <- function(data, align = NULL, header = NULL, footer = NULL, ...) {
     if (!inherits(data, "data.frame")) data <- as.data.frame(data)
+    args <- list(...)
 
     align <- valid_align(data, align)
     data <- vapply(data, format_column, character(nrow(data)))
@@ -433,12 +435,15 @@ GridTable <- function(data, align = NULL, header = NULL, footer = NULL, ...) {
     }
     if (is.null(footer)) footer <- Inf
     width <- vapply(as.data.frame(data), cal_column_width, integer(1))
-    structure(data,
-              width  = width,
-              align  = align,
-              header = header,
-              footer = footer,
-              class  = "GridTable", ...)
+    names(width) <- NULL
+    data <- data.table::as.data.table(data)
+    class(data) <- c("GridTable", class(data))
+    data.table::setattr(data, "width", width)
+    data.table::setattr(data, "align", align)
+    data.table::setattr(data, "header", header)
+    data.table::setattr(data, "footer", footer)
+    purrr::iwalk(args, \(x, y) data.table::setattr(data, y, x))
+    data
 }
 
 last_edge <- function(row) {
@@ -474,6 +479,22 @@ is_overlaped <- function(x, y) {
 
 #' @export
 print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
+    content <- toString(gtable, ...)
+    cat(content, sep = "\n")
+    invisible(content)
+}
+
+#' @export
+toString.Table <- function(table, drop_empty_line = TRUE, ...) {
+    table_content <- purrr::map_chr(table$rows, ~ toString.Row(.x))
+    if (isTRUE(drop_empty_line)) {
+        table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
+    }
+    table_content
+}
+
+#' @export
+toString.GridTable <- function(gtable, ...) {
     rownum <- nrow(gtable)
     colnum <- ncol(gtable)
     Table <- Cell(gtable, 1, 1) 
@@ -483,22 +504,13 @@ print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
             Table <- Table + Cell(gtable, i, j)
         }
     }
-    if (!is.null(attr(gtable, "capture"))) {
-        cat(attr(gtable, "capture"), "\n\n")
+
+    content <- toString(Table, ...)
+    if (!is.null(attr(gtable, "caption"))) {
+        content <- c(attr(gtable, "caption"), "", content)
     }
 
-    print(Table, drop_empty_line, ...)
-    invisible(Table)
-}
-
-#' @export
-print.Table <- function(table, drop_empty_line = TRUE, ...) {
-    table_content <- purrr::map_chr(table$rows, ~ toString.Row(.x))
-    if (isTRUE(drop_empty_line)) {
-        table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
-    }
-    cat(table_content, sep = "\n")
-    invisible(table_content)
+    structure(content, class = "GridTable_output")
 }
 
 row_extend <- function(row, edge) {
@@ -689,10 +701,10 @@ simple_to_grid <- function(kbl, ...) {
     stopifnot(format %in% c("simple", "pipe"))
 
     if (grepl("^Table:", kbl[1])) {
-        capture <- kbl[1]
+        caption <- kbl[1]
         kbl     <- kbl[-(1:2)]
     } else {
-        capture <- NULL
+        caption <- NULL
     }
     sep <- " "
     if (format == "pipe") {
@@ -717,7 +729,7 @@ simple_to_grid <- function(kbl, ...) {
     args <- list(...)
     args$data <- data
     if (is.null(args$header)) args$header = 1L
-    if (is.null(args$capture)) args$capture = capture
+    if (is.null(args$caption)) args$caption = caption
     do.call(GridTable, args)
 }
 
