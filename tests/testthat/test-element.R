@@ -1,8 +1,13 @@
 context("Test element")
 
+e11 <- Edge(r11, r12, "-")
+e12 <- Edge(r11, r13, "-")
+edge_relation(e11, e12)
+edge_merge(e11, e12)
 
 r11 <- Node(Coordinate(1L, 1L), "+")
 r12 <- Node(Coordinate(1L, 9L), "+")
+r13 <- Node(Coordinate(1L, 12L), "+")
 r21 <- Node(Coordinate(2L, 1L), "|")
 r22 <- Node(Coordinate(2L, 9L), "|")
 r31 <- Node(Coordinate(3L, 1L), "+")
@@ -11,6 +16,9 @@ e1  <- Row(Edge(r11, r12, "-", "l"))
 e2  <- Row(Edge(r21, r22, "test"))
 e3  <- Row(Edge(r31, r32, "-"))
 T <- Table(e1, e2, e3)
+edge_relation(e1, e2)
+
+
 
 dt <- data.table::fread("
 Location            | Temperature 1961-1990 ||
@@ -24,6 +32,9 @@ gdt <- GridTable(dt, header = 3, align = "lrrr") |>
     bind_cell(c(1,3), 1, drop_content = TRUE) |>
     bind_cell(c(1,2), c(2,4)) |>
     bind_cell(c(4,5), 2, drop_content = TRUE, middle = TRUE)
+
+
+
 
 toString.GridTable(gdt) %>% str()
 
@@ -39,19 +50,13 @@ out <- file.path(Sys.getenv("NUTSTORE"),
                             "基本模型回归结果.Rds") |>
         readRDS()
 out <- out$out
+gdt <- simple_to_grid(out)
 
-start_end <- column_start_end_points(out[[3]])
 
-re <- purrr::map(out[4:39], \(line) {
-    purrr::map_chr(start_end, \(x) substr_width(line, x[1], x[2]))
-})
 
-simple <- knitr::kable(mtcars[1:4, 1:4], "pipe", col.names = NULL, caption = "test")
 
-simple_to_grid(out)
-
-str(simple)
-
+system.time(gdt <- simple_to_grid(out))
+system.time(x <- toString(gdt))
 
 
 grepl(valid_regex, simple[2], perl = TRUE)

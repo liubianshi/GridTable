@@ -23,6 +23,104 @@ SYMBOL <- list(VERTICE = "+",
     e1$leftnode == e2$leftnode && e1$rightnode == e2$rightnode
 }
 
+`<.Edge` <- function(e1, e2) {
+    e1$leftnode < e2$leftnode
+}
+
+range_relation <- function(s1, s2, na.rm = TRUE) {
+    l1 <- min(s1, na.rm = na.rm)
+    l2 <- min(s2, na.rm = na.rm)
+    r1 <- max(s1, na.rm = na.rm)
+    r2 <- max(s2, na.rm = na.rm)
+
+    if (r1 < l2) {
+        return("LEFT")
+    } else if (r1 == l2) {
+        return("ADJACENT_LEFT")
+    } else if (r1 > l2 & r1 < r2) {
+        return(
+            if      (l1 < l2)  "OVERLAP_LEFT"
+            else if (l1 == l2) "IN_SAME_START"
+            else               "In"
+        )
+    } else if (r1 == r2) {
+        return(
+            if      (l1 < l2)  "CONTAIN_SAME_END"
+            else if (l1 == l2) "EQUAL"
+            else               "IN_SAME_END"
+        )
+    } else {
+        return(
+            if      (l1 <  l2)           "CONTAIN"
+            else if (l1 == l2)           "CONTAIN_SAME_START"
+            else if (l1 > l2 && l1 < r2) "OVERLAP_RIGHT"
+            else if (l1 == r2)           "ADJACENT_RIGHT"
+            else                         "RIGHT"
+        )
+    }
+}
+
+
+edge_relation <- function(e1, e2) {
+    stopifnot(inherits(e1, "Edge") && inherits(e2, "Edge"))
+    stopifnot(row_no(e1) == row_no(e2))
+    range_relation(col_no(e1), col_no(e2))
+}
+
+sort_edge_list <- function(edge_list) {
+    edge_list <- edge_list[!purrr::map_lgl(edge_list, is.null)]
+    lcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$leftnode))
+    rcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$rightnode))
+    index <- lcol_nos * max(rcol_nos) + rcol_nos
+    edge_list[order(index)]
+}
+
+integrate_edge_list <- function(edge_list) {
+    old <- sort_edge_list(edge_list)
+    if (length(edge_list) == 1) return(old)
+
+    new <- list(shift(old))
+    temp <- list(shift(old)) 
+    while (length(old) > 0 || length(temp) > 0) {
+        e <- if (length(temp) == 0)         shift(old)
+             else if (length(old)  == 0)    shift(temp)
+             else if (old[[1]] < temp[[1]]) shift(old)
+             else                           shift(temp)
+        m <- edge_merge(new[[length(new)]], e)
+        if (e < m[[length(m)]]) {
+            new <- c(new[-length(new)], m[-length(m)])
+            temp <- sort_edge_list(c(m[length(m)], temp))
+        } else {
+            new <- c(new[-length(new)], m)
+        }
+    }
+    new
+}
+
+shift <- function (x, drop = TRUE) 
+{
+    if (length(x) == 0) 
+        return(NULL)
+    outer_x <- as.character(substitute(x))
+    shiftret <- if (isTRUE(drop) && is.list(x)) {
+        x[[1]]
+    }
+    else {
+        x[1, drop = drop]
+    }
+    assign(as.character(substitute(x)), x[-1], parent.frame())
+    shiftret
+}
+
+
+row_merge <- function(rows) {
+    stopifnot(length(unique(purrr::map_int(rows, "row_no"))) == 1)
+    rows <- rows[purrr::map_lgl(rows, \(r) r$n != 0)]
+    all_edges <- do.call(c, purrr::map(rows, "edges"))
+    do.call(Row, integrate_edge_list(all_edges))
+}
+
+
 `+.Row` <- function(r1, r2) {
     if (r1$row_no != r2$row_no) stop("rows must have same row number", call. = FALSE)
     if (r1$n == 0)                     return (r2)
@@ -61,6 +159,17 @@ table_row <- function(row) {
         }
     )
     
+    do.call(Table, new_rows)
+}
+
+merge_table_list <- function(tables) {
+    tables <- tables[!purrr::map_lgl(tables, is.null)]
+    longest <- max(purrr::map_int(tables, "length"))
+        new_rows <- purrr::map(seq_len(longest), \(i) {
+            rows <- purrr::map(tables, \(t) if (t$length < i) NULL else t$rows[[i]])
+            rows <- rows[!purrr::map_lgl(rows, is.null)]
+            row_merge(rows)
+        })
     do.call(Table, new_rows)
 }
 
@@ -283,6 +392,7 @@ col_no <- function(x) {
         Coordinate = x[2],
         Node       = col_no(x$coordinate),
         Edge       = c(col_no(x$leftnode), col_no(x$rightnode)),
+        list       = purrr::map_int(x, col_no),
         default    = stop("wrong object")
     )
 }
@@ -339,9 +449,67 @@ edge_split <- function(edge, node, align_l = edge$align,
 
 edge_left_extend <- function(e1, e2) {
     updated_node <- node_merge(e1$rightnode, e2$leftnode)
-    return(list(left  = edge_update(e1, rightnode = updated_node),
-                right = edge_update(e2, leftnode = updated_node)))
+    return(list(edge_update(e1, rightnode = updated_node),
+                edge_update(e2, leftnode = updated_node)))
 }
+
+edge_merge <- function(e1, e2) {
+    if (col_no(e1$leftnode) > col_no(e2$leftnode)) return(edge_merge(e2, e1))
+    switch(edge_relation(e1, e2),
+        LEFT = {
+            list(e1, Edge(e1$rightnode, e2$leftnode, ""), e2)
+        },
+        ADJACENT_LEFT = {
+            edge_left_extend(e1, e2)
+        },
+        CONTAIN_SAME_END = {
+            left_part    <- edge_update(e1, rightnode = e2$leftnode)
+            overlap_part <- edge_update(e1, leftnode = e2$leftnode, align = e2$align)
+            c(list(excess_part), edge_left_merge(overlap_part, e2))
+        },
+        OVERLAP_LEFT = {
+            left_part    <- edge_update(e1, rightnode = e2$leftnode)
+            overlap_p1   <- edge_update(e1, leftnode  = e2$leftnode)
+            overlap_p2   <- edge_update(e2, rightnode = e1$rightnode)
+            right_part   <- edge_update(e2, leftnode  = e1$rightnode)
+            c(list(excess_part), edge_left_merge(overlap_p1, eoverlap_p2),
+              list(right_part))
+        },
+        IN_SAME_START = {
+            overlap_part <- edge_update(e2, rightnode = e1$rightnode, align = e1$align)
+            right_part   <- edge_update(e2, leftnode  = e1$rightnode)
+            c(edge_left_merge(e1, overlap_part), list(right_part))
+        },
+        EQUAL = {
+            e1 <- edge_update(e1, leftnode = node_merge(e1$leftnode, e2$leftnode),
+                                  rightnode = node_merge(e1$rightnode, e2$rightnode))
+            if ((e1$type[1] == "Normal" && e2$type[1] != "Empty") ||
+                (e1$type[1] != "Empty"  && e2$type[1] == "Normal")) {
+                stop("Content Overlapping", call. = FALSE)
+            } 
+            if (e1$type[1] == "Empty" || sum(c("HEADER", "FOOTER") %in% e2$type)) {
+                e1 <- edge_update(e1, content = e2$content,
+                                      type = e2$type,
+                                      symbol = e2$symbol)
+            } 
+            list(e1)
+        },
+        CONTAIN = {
+            left_part    <- edge_update(e1, rightnode = e2$leftnode)
+            overlap_part <- edge_update(e1, leftnode  = e2$leftnode,
+                                            rightnode = e2$rightnode,
+                                            align     = e2$align)
+            right_part   <- edge_update(e1, leftnode  = e2$rightnode)
+            c(list(left_part), edge_left_merge(overlap_part, e2), list(right_part))
+        },
+        CONTAIN_SAME_START = {
+            overlap_part <- edge_update(e1, rightnode = e2$rightnode, align = e2$align)
+            right_part   <- edge_update(e1, leftnode  = e2$rightnode)
+            c(edge_left_merge(overlap_part, e2), list(right_part))
+        }
+    )
+}
+
 
 edge_left_merge <- function(e1, e2) {
     # not overlap
@@ -463,11 +631,30 @@ Node <- function(coordinate, symbol = "+") {
               class = "Node")
 }
 
+row_no_allequal <- function(...) {
+    args <- list(...)
+    row_nos <- purrr::map(args, row_no) |> unlist() |> unique()
+    length(row_nos) == 1L
+}
+
 node_merge <- function(n1, n2) {
+    if (is.null(n1)) return(n2)
+    if (is.null(n2)) return(n1)
     stopifnot(n1 == n2)
     if (n2$symbol == SYMBOL$VERTICE) return(n2)
     return(n1)
 }
+
+node_list_merge <- function(nodes1, nodes2) {
+    stopifnot(do.call(row_no_allequal, c(nodes1, nodes2)))
+    col_nos1 <- col_no(nodes1)
+    col_nos2 <- col_no(nodes2)
+    col_nos <- sort(unique(col_nos1, col2_nos1))
+    purrr::map(col_nos, \(i) {
+        node_merge(get_node_where(nodes1, i), get_node_where(nodes2, i))
+    })
+}
+
 
 is_overlaped <- function(x, y) {
     stopifnot(length(x) == 2 && length(y) == 2)
@@ -497,13 +684,19 @@ toString.Table <- function(table, drop_empty_line = TRUE, ...) {
 toString.GridTable <- function(gtable, ...) {
     rownum <- nrow(gtable)
     colnum <- ncol(gtable)
-    Table <- Cell(gtable, 1, 1) 
-    for (i in seq_len(rownum)) {
-        for (j in seq_len(colnum)) {
-            if (i == 1 && j == 1) next
-            Table <- Table + Cell(gtable, i, j)
-        }
-    }
+
+    cells <- purrr::map(seq_len(rownum), \(i) {
+        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j))
+    }) 
+    cells <- do.call(c, cells)  
+    Table <- merge_table_list(cells)
+
+    # for (i in seq_len(rownum)) {
+    #     for (j in seq_len(colnum)) {
+    #         if (i == 1 && j == 1) next
+    #         Table <- Table + Cell(gtable, i, j)
+    #     }
+    # }
 
     content <- toString(Table, ...)
     if (!is.null(attr(gtable, "caption"))) {
@@ -512,6 +705,7 @@ toString.GridTable <- function(gtable, ...) {
 
     structure(content, class = "GridTable_output")
 }
+
 
 row_extend <- function(row, edge) {
     stopifnot(last_node(row) == edge$leftnode)
@@ -527,6 +721,7 @@ row_no <- function(x) {
         Coordinate = x[1],
         Node       = row_no(x$coordinate),
         Edge       = row_no(x$leftnode),
+        Row        = x$row_no,
         default    = stop("wrong object")
     )
 }
