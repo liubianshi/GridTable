@@ -2,8 +2,8 @@
 
 S3method(print,GridTable)
 S3method(toString,GridTable)
-S3method(toString,Table)
 export(GridTable)
-export(bind_cell)
+export(kable_to_grid)
+export(merge_cells)
+export(row_no)
 export(set_attr)
-export(simple_to_grid)

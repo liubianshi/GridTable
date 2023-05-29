@@ -29,15 +29,19 @@ Earth               | -89.2 | 14    | 56.7
 ", sep = "|")
 
 gdt <- GridTable(dt, header = 3, align = "lrrr") |>
-    bind_cell(c(1,3), 1, drop_content = TRUE) |>
-    bind_cell(c(1,2), c(2,4)) |>
-    bind_cell(c(4,5), 2, drop_content = TRUE, middle = TRUE)
-gdt
+    merge_cells(c(1,3), 1, inline_block = TRUE) |>
+    merge_cells(c(1,2), c(2,4), inline_block = TRUE) |>
+    merge_cells(c(4,5), 2, drop_content = TRUE, middle = TRUE)
+
+gdt[1, V1 := paste0(V1, "\n", "Test")]
+merge_cells(gdt, 1:3, 1, cancel = TRUE)
+str(gdt)
+merge_cells(gdt)
 
 toString.GridTable(gdt) %>% str()
 
-set_attr(gdt, "width", "B/2")
-set_attr(gdt, "width", "B-3")
+set_attr(gdt, "width", "2/2")
+set_attr(gdt, "width", "b-3")
 
 print(gdt, drop_empty_line = TRUE)
 
@@ -45,7 +49,7 @@ out <- file.path(Sys.getenv("NUTSTORE"),
                             "论文/IIA 和国际直接投资/写作/iia_ma",
                             "基本模型回归结果.Rds") |>
         readRDS()
-out <- simple_to_grid(out$out)
+out <- kable_to_grid(out$out)
 
 system.time(print(out))
 
@@ -56,5 +60,5 @@ grepl(valid_regex, simple[2], perl = TRUE)
 gdt <-  do.call(rbind, re) |>
         as.data.table() |>
         GridTable(header = 2, align = "lrrrrrr")
-bind_cell(gdt, 1, 2:7)
+merge_cells(gdt, 1, 2:7)
 
