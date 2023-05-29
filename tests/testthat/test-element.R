@@ -32,6 +32,7 @@ gdt <- GridTable(dt, header = 3, align = "lrrr") |>
     bind_cell(c(1,3), 1, drop_content = TRUE) |>
     bind_cell(c(1,2), c(2,4)) |>
     bind_cell(c(4,5), 2, drop_content = TRUE, middle = TRUE)
+gdt
 
 toString.GridTable(gdt) %>% str()
 

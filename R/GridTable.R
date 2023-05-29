@@ -27,157 +27,6 @@ SYMBOL <- list(VERTICE = "+",
     e1$leftnode < e2$leftnode
 }
 
-range_relation <- function(s1, s2, na.rm = TRUE) {
-    l1 <- min(s1, na.rm = na.rm)
-    l2 <- min(s2, na.rm = na.rm)
-    r1 <- max(s1, na.rm = na.rm)
-    r2 <- max(s2, na.rm = na.rm)
-
-    if (r1 < l2) {
-        return("LEFT")
-    } else if (r1 == l2) {
-        return("ADJACENT_LEFT")
-    } else if (r1 > l2 & r1 < r2) {
-        return(
-            if      (l1 < l2)  "OVERLAP_LEFT"
-            else if (l1 == l2) "IN_SAME_START"
-            else               "In"
-        )
-    } else if (r1 == r2) {
-        return(
-            if      (l1 < l2)  "CONTAIN_SAME_END"
-            else if (l1 == l2) "EQUAL"
-            else               "IN_SAME_END"
-        )
-    } else {
-        return(
-            if      (l1 <  l2)           "CONTAIN"
-            else if (l1 == l2)           "CONTAIN_SAME_START"
-            else if (l1 > l2 && l1 < r2) "OVERLAP_RIGHT"
-            else if (l1 == r2)           "ADJACENT_RIGHT"
-            else                         "RIGHT"
-        )
-    }
-}
-
-
-edge_relation <- function(e1, e2) {
-    stopifnot(inherits(e1, "Edge") && inherits(e2, "Edge"))
-    stopifnot(row_no(e1) == row_no(e2))
-    range_relation(col_no(e1), col_no(e2))
-}
-
-sort_edge_list <- function(edge_list) {
-    edge_list <- edge_list[!purrr::map_lgl(edge_list, is.null)]
-    lcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$leftnode))
-    rcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$rightnode))
-    index <- lcol_nos * max(rcol_nos) + rcol_nos
-    edge_list[order(index)]
-}
-
-integrate_edge_list <- function(edge_list) {
-    old <- sort_edge_list(edge_list)
-    if (length(edge_list) == 1) return(old)
-
-    new <- list(shift(old))
-    temp <- list(shift(old)) 
-    while (length(old) > 0 || length(temp) > 0) {
-        e <- if (length(temp) == 0)         shift(old)
-             else if (length(old)  == 0)    shift(temp)
-             else if (old[[1]] < temp[[1]]) shift(old)
-             else                           shift(temp)
-        m <- edge_merge(new[[length(new)]], e)
-        if (e < m[[length(m)]]) {
-            new <- c(new[-length(new)], m[-length(m)])
-            temp <- sort_edge_list(c(m[length(m)], temp))
-        } else {
-            new <- c(new[-length(new)], m)
-        }
-    }
-    new
-}
-
-shift <- function (x, drop = TRUE) 
-{
-    if (length(x) == 0) 
-        return(NULL)
-    outer_x <- as.character(substitute(x))
-    shiftret <- if (isTRUE(drop) && is.list(x)) {
-        x[[1]]
-    }
-    else {
-        x[1, drop = drop]
-    }
-    assign(as.character(substitute(x)), x[-1], parent.frame())
-    shiftret
-}
-
-
-row_merge <- function(rows) {
-    stopifnot(length(unique(purrr::map_int(rows, "row_no"))) == 1)
-    rows <- rows[purrr::map_lgl(rows, \(r) r$n != 0)]
-    all_edges <- do.call(c, purrr::map(rows, "edges"))
-    do.call(Row, integrate_edge_list(all_edges))
-}
-
-`+.Row` <- function(r1, r2) {
-    if (r1$row_no != r2$row_no) stop("rows must have same row number", call. = FALSE)
-    if (r1$n == 0)                     return (r2)
-    if (r2$n == 0)                     return (r1)
-    if (r1$nodes[[1]] > r2$nodes[[1]]) return (`+.Row`(r2, r1))
-    if (r1$nodes[[r1$n]] < r2$nodes[[1]]) {
-        stop("must be adjacent or overlapping", call. = FALSE)
-    }
-    for (edge in r2$edges) {
-        r1 <- row_update(r1, edge)
-    }
-    r1
-}
-
-
-table_row <- function(row) {
-    if (row$n != 0 && col_no(row$nodes[[1]]) != 1) {
-        empty_row(row$row_no, 1, col_no(row$nodes[[1]])) + row
-    } else {
-        row
-    }
-}
-
-
-`+.Table` <- function(t1, t2) {
-    if (is.null(t1)) return(t2)
-    if (is.null(t2)) return(t1)
-    if (t1$length < t2$length) {
-        return(`+.Table`(t2, t1))
-    }
-    new_rows <- purrr::map(
-        seq_len(t1$length),
-        \(.x) {
-            if (.x <= t2$length) table_row(t1$rows[[.x]] + t2$rows[[.x]])
-            else                 table_row(t1$rows[[.x]])
-        }
-    )
-    
-    do.call(Table, new_rows)
-}
-
-merge_cell_list <- function(cells) {
-    cells <- cells[!purrr::map_lgl(cells, is.null)]
-    purrr::walk(cells, \(c) stopifnot(inherits(c, "Cell")))
-
-    longest <- max(purrr::map_int(cells, ~ attr(.x, "end")))
-    new_rows <- purrr::map(seq_len(longest), \(i) {
-        edges <- purrr::map(cells, \(c) {
-            start <- attr(c, "start")
-            end   <- attr(c, "end")
-            if (i %in% start:end) c[[i - start + 1]] else NULL
-        })
-        edges <- edges[!purrr::map_lgl(edges, is.null)]
-        do.call(Row, c(integrate_edge_list(edges), row_no = i))
-    })
-    do.call(Table, new_rows)
-}
-
 `%between%` <- function(x, a) x >= a[1] & x <= a[2]
 
 #' @export
@@ -303,79 +152,30 @@ Cell <- function(table, i, j) {
     structure(edges, start = start_row, end = end_row, class = "Cell")
 }
 
-valid_merged_cell <- function(merged_cell, gridtable) {
-    stopifnot(inherits(merged_cell, "list"))
-    stopifnot(all(c("rows", "cols") %in% names(merged_cell)))
 
-    merged_cell <-
-        purrr::map(merged_cell[c("rows", "cols")], \(x) {
-            x <- toInteger(x)
-            m <- min(x, na.rm = TRUE)
-            M <- max(x, na.rm = TRUE)
-            if (length(x) > 2) stopifnot(identical(sort(x), m:M))
-            c(m, M)
-        })
-    stopifnot(all(merged_cell$rows %in% 1:nrow(gridtable)))
-    stopifnot(all(merged_cell$cols %in% 1:ncol(gridtable)))
-
-    if (merged_cell$rows[1] < attr(gridtable, "header") &&
-        merged_cell$rows[2] > attr(gridtable, "header")) {
-        stop("Cannot Span header row", call. = FALSE)
-    }
-
-    merged_cell
-}
-
-substr_width <- function(x, start, end) {
-    width     <- end - start + 1
-    pre_width <- start - 1
-
-    pre       <- substr(x, 1, start - 1)
-    while (start >= 0 && stringr::str_width(pre) > pre_width) {
-        start <- start - 1
-        end   <- end - 1
-        pre   <- substr(pre, 1, start - 1)
-        if (stringr::str_width(pre) < pre_width) {
-            stop("Start point cut character", call. = FALSE)
-        }
-    }
-
-    subs <- substr(x, start, end)
-    end  <- width
-    while (end >= 0 && stringr::str_width(subs) > width) {
-        end <- end - 1
-        subs <- substr(subs, 1, end)
-        if (stringr::str_width(subs) < width) {
-            stop("End point cut character", call. = FALSE)
-        }
-    }
-
-    subs
-}
-
-column_start_end_points <- function(line, sep = " ") {
+column_start_end_points <-  function (line, sep = " ") {
     line_width <- stringr::str_width(line)
     sep_p <- which(stringr::str_split(line, "")[[1]] == sep)
-    if (length(sep_p) == 0) return(NULL)
-
-    keep <- purrr::map_lgl(seq_along(sep_p), \(x) {
-        if (x == 1) return(TRUE)
-        if (x == length(sep_p)) return(TRUE)
-        if (sep_p[x] - sep_p[x - 1] == 1 &&
-            sep_p[x + 1] - sep_p[x] == 1) return(FALSE)
+    if (length(sep_p) == 0) 
+        return(NULL)
+    keep <- purrr::map_lgl(seq_along(sep_p), function(x) {
+        if (x == 1) 
+            return(TRUE)
+        if (x == length(sep_p)) 
+            return(TRUE)
+        if (sep_p[x] - sep_p[x - 1] == 1 && sep_p[x + 1] - sep_p[x] == 1) 
+            return(FALSE)
         return(TRUE)
     })
     sep_p <- sep_p[keep]
-    start_end_points <- purrr::map(seq_along(sep_p), \(i) {
+    start_end_points <- unlist(purrr::map(seq_along(sep_p), function(i) {
         if (i == 1) {
-            return(
-                if      (all(sep_p[1:2] == 1:2)) NULL
-                else if (sep_p[1] == 1)          2
-                else                             c(1, sep_p[1] - 1)
-            )
+            return(if (all(sep_p[1:2] == 1:2)) NULL else if (sep_p[1] == 
+                1) 2 else c(1, sep_p[1] - 1))
         }
         if (i == length(sep_p)) {
-            if (all(sep_p[length(sep_p) - 1:0] == line_width - 1:0)) {
+            if (all(sep_p[length(sep_p) - 1:0] == line_width - 
+                1:0)) {
                 return(NULL)
             }
             if (sep_p[length(sep_p)] == line_width) {
@@ -383,15 +183,15 @@ column_start_end_points <- function(line, sep = " ") {
             }
             return(c(sep_p[length(sep_p)] + 1, line_width))
         }
-
-        if (sep_p[i] == sep_p[i-1] + 1) return(sep_p[i] + 1)
-        if (sep_p[i] == sep_p[i+1] - 1) return(sep_p[i] - 1)
+        if (sep_p[i] == sep_p[i - 1] + 1) 
+            return(sep_p[i] + 1)
+        if (sep_p[i] == sep_p[i + 1] - 1) 
+            return(sep_p[i] - 1)
         return(c(sep_p[i] - 1, sep_p[i] + 1))
-    }) |> unlist()
+    }))
     purrr::map(seq_len(length(start_end_points)/2),
-               \(i) start_end_points[2*i - 1:0])
+               function(i) start_end_points[2 * i - 1:0])
 }
-
 col_no <- function(x) {
     switch(class(x),
         Coordinate = x[2],
@@ -401,6 +201,7 @@ col_no <- function(x) {
         default    = stop("wrong object")
     )
 }
+
 
 Coordinate <- function(x, y) {
     structure(c(toInteger(x), toInteger(y)), class = "Coordinate")
@@ -437,21 +238,6 @@ Edge <- function(leftnode, rightnode, content, align = NULL) {
               class = "Edge")
 }
 
-edge_update <- function(e, ...) {
-    attrs <- list(...)
-    for (i in seq_along(attrs)) {
-        e[[names(attrs)[i]]] <- attrs[[i]]
-    }
-    e
-}
-
-edge_split <- function(edge, node, align_l = edge$align,
-                                   align_r = edge$align) {
-    if (is.null(edge$symbol)) stop("Normal edge cannot be split")
-    list(left  = edge_update(edge, rightnode = node, align = align_l),
-         right = edge_update(edge, leftnode  = node, align = align_r))
-}
-
 edge_left_extend <- function(e1, e2) {
     updated_node <- node_merge(e1$rightnode, e2$leftnode)
     return(list(edge_update(e1, rightnode = updated_node),
@@ -470,20 +256,20 @@ edge_merge <- function(e1, e2) {
         CONTAIN_SAME_END = {
             left_part    <- edge_update(e1, rightnode = e2$leftnode)
             overlap_part <- edge_update(e1, leftnode = e2$leftnode, align = e2$align)
-            c(list(excess_part), edge_left_merge(overlap_part, e2))
+            c(list(excess_part), edge_merge(overlap_part, e2))
         },
         OVERLAP_LEFT = {
             left_part    <- edge_update(e1, rightnode = e2$leftnode)
             overlap_p1   <- edge_update(e1, leftnode  = e2$leftnode)
             overlap_p2   <- edge_update(e2, rightnode = e1$rightnode)
             right_part   <- edge_update(e2, leftnode  = e1$rightnode)
-            c(list(excess_part), edge_left_merge(overlap_p1, eoverlap_p2),
+            c(list(excess_part), edge_merge(overlap_p1, eoverlap_p2),
               list(right_part))
         },
         IN_SAME_START = {
             overlap_part <- edge_update(e2, rightnode = e1$rightnode, align = e1$align)
             right_part   <- edge_update(e2, leftnode  = e1$rightnode)
-            c(edge_left_merge(e1, overlap_part), list(right_part))
+            c(edge_merge(e1, overlap_part), list(right_part))
         },
         EQUAL = {
             e1 <- edge_update(e1, leftnode = node_merge(e1$leftnode, e2$leftnode),
@@ -505,57 +291,41 @@ edge_merge <- function(e1, e2) {
                                             rightnode = e2$rightnode,
                                             align     = e2$align)
             right_part   <- edge_update(e1, leftnode  = e2$rightnode)
-            c(list(left_part), edge_left_merge(overlap_part, e2), list(right_part))
+            c(list(left_part), edge_merge(overlap_part, e2), list(right_part))
         },
         CONTAIN_SAME_START = {
             overlap_part <- edge_update(e1, rightnode = e2$rightnode, align = e2$align)
             right_part   <- edge_update(e1, leftnode  = e2$rightnode)
-            c(edge_left_merge(overlap_part, e2), list(right_part))
+            c(edge_merge(overlap_part, e2), list(right_part))
         }
     )
 }
 
+edge_relation <- function(e1, e2) {
+    stopifnot(inherits(e1, "Edge") && inherits(e2, "Edge"))
+    stopifnot(row_no(e1) == row_no(e2))
+    range_relation(col_no(e1), col_no(e2))
+}
+edge_update <- function(e, ...) {
+    attrs <- list(...)
+    for (i in seq_along(attrs)) {
+        e[[names(attrs)[i]]] <- attrs[[i]]
+    }
+    e
+}
 
-edge_left_merge <- function(e1, e2) {
-    # not overlap
-    if (e1$rightnode <  e2$leftnode)  return(list(e1))
-    if (e1$leftnode  >  e2$rightnode) return(list(e1))
-    if (e1$rightnode == e2$leftnode)  {
-        updated_node <- node_merge(e1$rightnode, e2$leftnode)
-        return(list(edge_update(e1, rightnode = updated_node)))
+empty_row <- function(row_no, left_col_no = NULL, right_col_no = NULL) {
+    stopifnot(is.null(left_col_no) == is.null(right_col_no))
+    if (is.null(left_col_no) || is.null(right_col_no)) {
+        return(structure(list(nodes = NULL,
+                              edges = NULL,
+                              n = 0,
+                              row_no = row_no),
+                              class = "Row"))
     }
-    if (e1$leftnode  == e2$rightnode) {
-        updated_node <- node_merge(e1$leftnode, e2$rightnode)
-        return(list(edge_update(e1, leftnode = updated_node)))
-    }
-
-    # overlapping
-    if (e1$leftnode == e2$leftnode) {
-        e1$leftnode  <- node_merge(e1$leftnode, e2$leftnode)
-    }
-    if (e1$rightnode == e2$rightnode) {
-        e1$rightnode <- node_merge(e1$rightnode, e2$rightnode)
-    }
-    if (e1$leftnode < e2$leftnode) {
-        excess_part  <- edge_update(e1, rightnode = e2$leftnode)
-        overlap_part <- edge_update(e1, leftnode = e2$leftnode, align = e2$align)
-        return(c(list(excess_part), edge_left_merge(overlap_part, e2)))
-    }
-    if (e1$rightnode > e2$rightnode) {
-        overlap_part <- edge_update(e1, rightnode = e2$rightnode, align = e2$align)
-        excess_part  <- edge_update(e1, leftnode = e2$rightnode)
-        return(c(edge_left_merge(overlap_part, e2), list(excess_part)))
-    }
-
-    if ((e1$type[1] == "Normal" && e2$type[1] != "Empty") ||
-        (e1$type[1] != "Empty"  && e2$type[1] == "Normal")) {
-        stop("Content Overlapping", call. = FALSE)
-    } 
-
-    if (e1$type[1] == "Empty" || sum(c("HEADER", "FOOTER") %in% e2$type)) {
-        e1 <- edge_update(e1, content = e2$content, type = e2$type, symbol = e2$symbol)
-    }
-    return(list(e1))
+    leftnode  <- Node(Coordinate(row_no, left_col_no),  SYMBOL$SIDE)
+    rightnode <- Node(Coordinate(row_no, right_col_no), SYMBOL$SIDE)
+    Row(Edge(leftnode, rightnode, " "))
 }
 
 format_column <- function(x, digits = 3L, ...) {
@@ -575,28 +345,9 @@ format_column <- function(x, digits = 3L, ...) {
     stringr::str_trim()
 }
 
-valid_align <- function(data, align = NULL) {
-    if (is.null(align)) {
-        align <- 
-            purrr::map_chr(data, \(x) {
-                switch(class(x),
-                    character = "l",
-                    numeric = "r",
-                    stop("Weird Column", call. = FALSE))
-            })
-    } else if (is.character(align)) {
-        stopifnot(length(align) %in% c(1, length(data)))
-        if (length(align) == 1) 
-            align <- rep(strsplit(align, "")[[1]], length(data))
-        stopifnot(all(align %in% c("l", "r", "c")))
-    } else {
-        stop("align needed to be a character or character vector", call. = FALSE)
-    }
-    align
-}
-
 #' @export
-GridTable <- function(data, align = NULL, header = NULL, footer = NULL, ...) {
+GridTable <- function(data, align = NULL,
+                      header = NULL, footer = NULL, ...) {
     if (!inherits(data, "data.frame")) data <- as.data.frame(data)
     args <- list(...)
 
@@ -619,14 +370,56 @@ GridTable <- function(data, align = NULL, header = NULL, footer = NULL, ...) {
     data
 }
 
-last_edge <- function(row) {
-    if (row$n == 0) return(NULL)
-    else            return(row$edges[[row$n - 1]])
+integrate_edge_list <- function(edge_list) {
+    old <- sort_edge_list(edge_list)
+    if (length(edge_list) == 1) return(old)
+
+    new <- list(shift(old))
+    temp <- list(shift(old)) 
+    while (length(old) > 0 || length(temp) > 0) {
+        e <- if (length(temp) == 0)         shift(old)
+             else if (length(old)  == 0)    shift(temp)
+             else if (old[[1]] < temp[[1]]) shift(old)
+             else                           shift(temp)
+        m <- edge_merge(new[[length(new)]], e)
+        if (e < m[[length(m)]]) {
+            new <- c(new[-length(new)], m[-length(m)])
+            temp <- sort_edge_list(c(m[length(m)], temp))
+        } else {
+            new <- c(new[-length(new)], m)
+        }
+    }
+    new
+}
+
+is_overlaped <- function(x, y) {
+    stopifnot(length(x) == 2 && length(y) == 2)
+    get <- function(x, i) if (is.atomic(x))        x[i]     else x[[i]] 
+    min <- function(z)    if (get(z,1) < get(z,2)) get(z,1) else get(z,2)
+    max <- function(z)    if (get(z,1) < get(z,2)) get(z,2) else get(z,1)
+    !(min(x) > max(y) || min(y) > max(x))
 }
 
 last_node <- function(row) {
     if (row$n == 0) return(NULL)
     else            return(row$nodes[[row$n]])
+}
+
+merge_cell_list <- function(cells) {
+    cells <- cells[!purrr::map_lgl(cells, is.null)]
+    purrr::walk(cells, \(c) stopifnot(inherits(c, "Cell")))
+
+    longest <- max(purrr::map_int(cells, ~ attr(.x, "end")))
+    new_rows <- purrr::map(seq_len(longest), \(i) {
+        edges <- purrr::map(cells, \(c) {
+            start <- attr(c, "start")
+            end   <- attr(c, "end")
+            if (i %in% start:end) c[[i - start + 1]] else NULL
+        })
+        edges <- edges[!purrr::map_lgl(edges, is.null)]
+        do.call(Row, c(integrate_edge_list(edges), row_no = i))
+    })
+    do.call(Table, new_rows)
 }
 
 Node <- function(coordinate, symbol = "+") {
@@ -636,11 +429,6 @@ Node <- function(coordinate, symbol = "+") {
               class = "Node")
 }
 
-row_no_allequal <- function(...) {
-    args <- list(...)
-    row_nos <- purrr::map(args, row_no) |> unlist() |> unique()
-    length(row_nos) == 1L
-}
 
 node_merge <- function(n1, n2) {
     if (is.null(n1)) return(n2)
@@ -661,12 +449,33 @@ node_list_merge <- function(nodes1, nodes2) {
 }
 
 
-is_overlaped <- function(x, y) {
-    stopifnot(length(x) == 2 && length(y) == 2)
-    get <- function(x, i) if (is.atomic(x))        x[i]     else x[[i]] 
-    min <- function(z)    if (get(z,1) < get(z,2)) get(z,1) else get(z,2)
-    max <- function(z)    if (get(z,1) < get(z,2)) get(z,2) else get(z,1)
-    !(min(x) > max(y) || min(y) > max(x))
+parse_number_adjust <- function(num, x) {
+    stopifnot(is.character(x))
+    if (!is.atomic(x)) {
+        x <- purrr::imap_chr(x, \(val,name) gettextf("%s%s", name, val))
+    }
+    x <- stringr::str_to_upper(x)
+
+    if (length(x) > 1) {
+        return(parse_number_adjust(parse_number_adjust(num, x[1]), x[-1]))
+    }
+
+    elements <- stringr::str_match(x, "^([A-Z]+)([-+*/=]?)([0-9]+)")[1, ]
+    if (is.na(elements[1])) return(NULL) else elements <- elements[2:4]
+
+    index <- which(LETTERS == stringr::str_split(elements[1], "")[[1]]) |> sum()
+    stopifnot(index <= length(num))
+    operand <- as.integer(elements[3])
+    operator <- if (is.na(elements[2])) "=" else elements[2]
+    switch(operator,
+        `=` = { num[index] <- operand },
+        `+` = { num[index] <- num[index] + operand },
+        `-` = { num[index] <- num[index] - operand },
+        `*` = { num[index] <- num[index] * operand },
+        `/` = { num[index] <- as.integer(num[index] / operand) },
+        default = stop("+-*/= or omit", call. = FALSE)
+    )
+    num
 }
 
 #' @export
@@ -677,50 +486,6 @@ print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
 }
 
 #' @export
-toString.Table <- function(table, drop_empty_line = TRUE, ...) {
-    table_content <- purrr::map_chr(table$rows, ~ toString.Row(.x))
-    if (isTRUE(drop_empty_line)) {
-        table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
-    }
-    table_content
-}
-
-#' @export
-toString.GridTable <- function(gtable, ...) {
-    rownum <- nrow(gtable)
-    colnum <- ncol(gtable)
-
-    cells <- purrr::map(seq_len(rownum), \(i) {
-        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j))
-    }) 
-    cells <- do.call(c, cells)  
-    Table <- merge_cell_list(cells)
-
-    # for (i in seq_len(rownum)) {
-    #     for (j in seq_len(colnum)) {
-    #         if (i == 1 && j == 1) next
-    #         Table <- Table + Cell(gtable, i, j)
-    #     }
-    # }
-
-    content <- toString(Table, ...)
-    if (!is.null(attr(gtable, "caption"))) {
-        content <- c(attr(gtable, "caption"), "", content)
-    }
-
-    structure(content, class = "GridTable_output")
-}
-
-
-row_extend <- function(row, edge) {
-    stopifnot(last_node(row) == edge$leftnode)
-    row$nodes[[row$n]]     <- node_merge(row$nodes[[row$n]], edge$leftnode)
-    row$nodes[[row$n + 1]] <- edge$rightnode
-    row$edges[[row$n]]     <- edge_update(edge, leftnode = row$nodes[[row$n]])
-    row$n                  <- row$n + 1
-    return(row)
-}
-
 row_no <- function(x) {
     switch(class(x),
         Coordinate = x[1],
@@ -731,40 +496,43 @@ row_no <- function(x) {
     )
 }
 
-row_update <- function(row, edge) {
-    if (edge$leftnode > last_node(row)) {
-        stop("must be adjacent or overlapping", call. = FALSE)
-    }
-    if (edge$leftnode == last_node(row)) {
-        return(row_extend(row, edge))
-    }
+range_relation <- function(s1, s2, na.rm = TRUE) {
+    l1 <- min(s1, na.rm = na.rm)
+    l2 <- min(s2, na.rm = na.rm)
+    r1 <- max(s1, na.rm = na.rm)
+    r2 <- max(s2, na.rm = na.rm)
 
-    if (edge$rightnode > last_node(row)) {
-        edges <- edge_split(edge, last_node(row),
-                            align_l = last_edge(row)$align)
-        return(row_extend(row_update(row, edges$left), edges$right))
+    if (r1 < l2) {
+        return("LEFT")
+    } else if (r1 == l2) {
+        return("ADJACENT_LEFT")
+    } else if (r1 > l2 & r1 < r2) {
+        return(
+            if      (l1 < l2)  "OVERLAP_LEFT"
+            else if (l1 == l2) "IN_SAME_START"
+            else               "In"
+        )
+    } else if (r1 == r2) {
+        return(
+            if      (l1 < l2)  "CONTAIN_SAME_END"
+            else if (l1 == l2) "EQUAL"
+            else               "IN_SAME_END"
+        )
+    } else {
+        return(
+            if      (l1 <  l2)           "CONTAIN"
+            else if (l1 == l2)           "CONTAIN_SAME_START"
+            else if (l1 > l2 && l1 < r2) "OVERLAP_RIGHT"
+            else if (l1 == r2)           "ADJACENT_RIGHT"
+            else                         "RIGHT"
+        )
     }
-
-    new_row_edges <- local({
-        edges_list_of_list <- purrr::map(row$edges, ~ edge_left_merge(.x, edge))
-        do.call(c, edges_list_of_list)
-    })
-
-    do.call(Row, new_row_edges)
 }
 
-empty_row <- function(row_no, left_col_no = NULL, right_col_no = NULL) {
-    stopifnot(is.null(left_col_no) == is.null(right_col_no))
-    if (is.null(left_col_no) || is.null(right_col_no)) {
-        return(structure(list(nodes = NULL,
-                              edges = NULL,
-                              n = 0,
-                              row_no = row_no),
-                              class = "Row"))
-    }
-    leftnode  <- Node(Coordinate(row_no, left_col_no),  SYMBOL$SIDE)
-    rightnode <- Node(Coordinate(row_no, right_col_no), SYMBOL$SIDE)
-    Row(Edge(leftnode, rightnode, " "))
+row_no_allequal <- function(...) {
+    args <- list(...)
+    row_nos <- purrr::map(args, row_no) |> unlist() |> unique()
+    length(row_nos) == 1L
 }
 
 Row <- function(..., row_no = NULL) {
@@ -796,35 +564,6 @@ Row <- function(..., row_no = NULL) {
                    row_no = row_no(edges[[1]])), class = "Row")
 }
 
-parse_number_adjust <- function(num, x) {
-    stopifnot(is.character(x))
-    if (!is.atomic(x)) {
-        x <- purrr::imap_chr(x, \(val,name) gettextf("%s%s", name, val))
-    }
-    x <- stringr::str_to_upper(x)
-
-    if (length(x) > 1) {
-        return(parse_number_adjust(parse_number_adjust(num, x[1]), x[-1]))
-    }
-
-    elements <- stringr::str_match(x, "^([A-Z]+)([-+*/=]?)([0-9]+)")[1, ]
-    if (is.na(elements[1])) return(NULL) else elements <- elements[2:4]
-
-    index <- which(LETTERS == stringr::str_split(elements[1], "")[[1]]) |> sum()
-    stopifnot(index <= length(num))
-    operand <- as.integer(elements[3])
-    operator <- if (is.na(elements[2])) "=" else elements[2]
-    switch(operator,
-        `=` = { num[index] <- operand },
-        `+` = { num[index] <- num[index] + operand },
-        `-` = { num[index] <- num[index] - operand },
-        `*` = { num[index] <- num[index] * operand },
-        `/` = { num[index] <- as.integer(num[index] / operand) },
-        default = stop("+-*/= or omit", call. = FALSE)
-    )
-    num
-}
-
 
 #' @export
 set_attr <- function(table, attr, value) {
@@ -844,54 +583,26 @@ set_attr <- function(table, attr, value) {
     )
 }
 
-Table <- function(...) {
-    rows    <- list(...)
-    row_nos <- purrr::map_int(rows, "row_no")
-    stopifnot(anyDuplicated(row_nos) == 0)
-
-    length  <- max(row_nos)
-    width   <- rows |>
-               purrr::map_int(\(x) if (x$n == 0) 0 else col_no(last_node(x))) |>
-               max()
-    rows    <- purrr::map(seq_len(length), ~ {
-        which_row <- which(row_nos == .x)
-        if (length(which_row) != 0)   rows[[which_row]]
-        else                          Row(row_no = .x)
-        
-    })
-    structure(list(rows = rows, length = length, width = width),
-              class = "Table")
+shift <- function (x, drop = TRUE) {
+    if (length(x) == 0) 
+        return(NULL)
+    outer_x <- as.character(substitute(x))
+    shiftret <- if (isTRUE(drop) && is.list(x)) {
+        x[[1]]
+    }
+    else {
+        x[1, drop = drop]
+    }
+    assign(as.character(substitute(x)), x[-1], parent.frame())
+    shiftret
 }
 
-toInteger <- function(x) {
-    stopifnot(!grepl(".", as.character(x + 0), fixed = TRUE))
-    as.integer(x)
-}
-
-toString.Edge <- function(edge) {
-    symbol_l <- if (col_no(edge$leftnode) == 1L) edge$leftnode$symbol else ""
-    symbol_r <- edge$rightnode$symbol
-    width    <- col_no(edge$rightnode) - col_no(edge$leftnode) - 1
-    if (edge$type[1] == "Normal") {
-        content   <- stringr::str_trim(edge$content)
-        space_num <- width - 1 - stringr::str_width(content)
-        content   <- paste0(" ", content, strrep(" ", space_num))
-        return(gettextf("%s%s%s", symbol_l, content, symbol_r))
-    }
-
-    if ((!is.null(edge$align)) && "HEADER" %in% edge$type ) {
-        align_symbol <- switch(edge$align,
-            l = c(SYMBOL$ALIGN, ""),
-            r = c("",           SYMBOL$ALIGN),
-            c = c(SYMBOL$ALIGN, SYMBOL$ALIGN),
-            default = stop("Align invalid", call. = FALSE)
-        )
-        edge_symbol_num <- width - sum(stringr::str_width(align_symbol))
-        return(gettextf("%s%s%s%s%s", symbol_l, align_symbol[1],
-                       strrep(edge$symbol, edge_symbol_num),
-                       align_symbol[2], symbol_r))
-    }
-    return(gettextf("%s%s%s", symbol_l, strrep(edge$symbol, width), symbol_r))
+sort_edge_list <- function(edge_list) {
+    edge_list <- edge_list[!purrr::map_lgl(edge_list, is.null)]
+    lcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$leftnode))
+    rcol_nos <- purrr::map_int(edge_list, \(e) col_no(e$rightnode))
+    index <- lcol_nos * max(rcol_nos) + rcol_nos
+    edge_list[order(index)]
 }
 
 #' @export
@@ -933,8 +644,164 @@ simple_to_grid <- function(kbl, ...) {
     do.call(GridTable, args)
 }
 
+substr_width <- function(x, start, end) {
+    width     <- end - start + 1
+    pre_width <- start - 1
+
+    pre       <- substr(x, 1, start - 1)
+    while (start >= 0 && stringr::str_width(pre) > pre_width) {
+        start <- start - 1
+        end   <- end - 1
+        pre   <- substr(pre, 1, start - 1)
+        if (stringr::str_width(pre) < pre_width) {
+            stop("Start point cut character", call. = FALSE)
+        }
+    }
+
+    subs <- substr(x, start, end)
+    end  <- width
+    while (end >= 0 && stringr::str_width(subs) > width) {
+        end <- end - 1
+        subs <- substr(subs, 1, end)
+        if (stringr::str_width(subs) < width) {
+            stop("End point cut character", call. = FALSE)
+        }
+    }
+
+    subs
+}
+
+toInteger <- function(x) {
+    stopifnot(!grepl(".", as.character(x + 0), fixed = TRUE))
+    as.integer(x)
+}
+
+Table <- function(...) {
+    rows    <- list(...)
+    row_nos <- purrr::map_int(rows, "row_no")
+    stopifnot(anyDuplicated(row_nos) == 0)
+
+    length  <- max(row_nos)
+    width   <- rows |>
+               purrr::map_int(\(x) if (x$n == 0) 0 else col_no(last_node(x))) |>
+               max()
+    rows    <- purrr::map(seq_len(length), ~ {
+        which_row <- which(row_nos == .x)
+        if (length(which_row) != 0)   rows[[which_row]]
+        else                          Row(row_no = .x)
+        
+    })
+    structure(list(rows = rows, length = length, width = width),
+              class = "Table")
+}
+
+
+toString.Edge <- function(edge) {
+    symbol_l <- if (col_no(edge$leftnode) == 1L) edge$leftnode$symbol else ""
+    symbol_r <- edge$rightnode$symbol
+    width    <- col_no(edge$rightnode) - col_no(edge$leftnode) - 1
+    if (edge$type[1] == "Normal") {
+        content   <- stringr::str_trim(edge$content)
+        space_num <- width - 1 - stringr::str_width(content)
+        content   <- paste0(" ", content, strrep(" ", space_num))
+        return(gettextf("%s%s%s", symbol_l, content, symbol_r))
+    }
+
+    if ((!is.null(edge$align)) && "HEADER" %in% edge$type ) {
+        align_symbol <- switch(edge$align,
+            l = c(SYMBOL$ALIGN, ""),
+            r = c("",           SYMBOL$ALIGN),
+            c = c(SYMBOL$ALIGN, SYMBOL$ALIGN),
+            default = stop("Align invalid", call. = FALSE)
+        )
+        edge_symbol_num <- width - sum(stringr::str_width(align_symbol))
+        return(gettextf("%s%s%s%s%s", symbol_l, align_symbol[1],
+                       strrep(edge$symbol, edge_symbol_num),
+                       align_symbol[2], symbol_r))
+    }
+    return(gettextf("%s%s%s", symbol_l, strrep(edge$symbol, width), symbol_r))
+}
+
 toString.Row <- function(row) {
     paste0(purrr::map_chr(row$edges, toString.Edge), collapse = "")
+}
+
+#' @export
+toString.GridTable <- function(gtable, ...) {
+    rownum <- nrow(gtable)
+    colnum <- ncol(gtable)
+
+    cells <- purrr::map(seq_len(rownum), \(i) {
+        purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j))
+    }) 
+    cells <- do.call(c, cells)  
+    Table <- merge_cell_list(cells)
+
+    # for (i in seq_len(rownum)) {
+    #     for (j in seq_len(colnum)) {
+    #         if (i == 1 && j == 1) next
+    #         Table <- Table + Cell(gtable, i, j)
+    #     }
+    # }
+
+    content <- toString(Table, ...)
+    if (!is.null(attr(gtable, "caption"))) {
+        content <- c(attr(gtable, "caption"), "", content)
+    }
+
+    structure(content, class = "GridTable_output")
+}
+
+toString.Table <- function(table, drop_empty_line = TRUE, ...) {
+    table_content <- purrr::map_chr(table$rows, ~ toString.Row(.x))
+    if (isTRUE(drop_empty_line)) {
+        table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
+    }
+    table_content
+}
+
+
+valid_align <- function(data, align = NULL) {
+    if (is.null(align)) {
+        align <- 
+            purrr::map_chr(data, \(x) {
+                switch(class(x),
+                    character = "l",
+                    numeric = "r",
+                    stop("Weird Column", call. = FALSE))
+            })
+    } else if (is.character(align)) {
+        stopifnot(length(align) %in% c(1, length(data)))
+        if (length(align) == 1) 
+            align <- rep(strsplit(align, "")[[1]], length(data))
+        stopifnot(all(align %in% c("l", "r", "c")))
+    } else {
+        stop("align needed to be a character or character vector", call. = FALSE)
+    }
+    align
+}
+
+valid_merged_cell <- function(merged_cell, gridtable) {
+    stopifnot(inherits(merged_cell, "list"))
+    stopifnot(all(c("rows", "cols") %in% names(merged_cell)))
+
+    merged_cell <-
+        purrr::map(merged_cell[c("rows", "cols")], \(x) {
+            x <- toInteger(x)
+            m <- min(x, na.rm = TRUE)
+            M <- max(x, na.rm = TRUE)
+            if (length(x) > 2) stopifnot(identical(sort(x), m:M))
+            c(m, M)
+        })
+    stopifnot(all(merged_cell$rows %in% 1:nrow(gridtable)))
+    stopifnot(all(merged_cell$cols %in% 1:ncol(gridtable)))
+
+    if (merged_cell$rows[1] < attr(gridtable, "header") &&
+        merged_cell$rows[2] > attr(gridtable, "header")) {
+        stop("Cannot Span header row", call. = FALSE)
+    }
+
+    merged_cell
 }
 
 # vim: set fdm=expr:
