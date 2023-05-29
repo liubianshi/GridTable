@@ -120,7 +120,6 @@ row_merge <- function(rows) {
     do.call(Row, integrate_edge_list(all_edges))
 }
 
-
 `+.Row` <- function(r1, r2) {
     if (r1$row_no != r2$row_no) stop("rows must have same row number", call. = FALSE)
     if (r1$n == 0)                     return (r2)
@@ -162,14 +161,20 @@ table_row <- function(row) {
     do.call(Table, new_rows)
 }
 
-merge_table_list <- function(tables) {
-    tables <- tables[!purrr::map_lgl(tables, is.null)]
-    longest <- max(purrr::map_int(tables, "length"))
-        new_rows <- purrr::map(seq_len(longest), \(i) {
-            rows <- purrr::map(tables, \(t) if (t$length < i) NULL else t$rows[[i]])
-            rows <- rows[!purrr::map_lgl(rows, is.null)]
-            row_merge(rows)
+merge_cell_list <- function(cells) {
+    cells <- cells[!purrr::map_lgl(cells, is.null)]
+    purrr::walk(cells, \(c) stopifnot(inherits(c, "Cell")))
+
+    longest <- max(purrr::map_int(cells, ~ attr(.x, "end")))
+    new_rows <- purrr::map(seq_len(longest), \(i) {
+        edges <- purrr::map(cells, \(c) {
+            start <- attr(c, "start")
+            end   <- attr(c, "end")
+            if (i %in% start:end) c[[i - start + 1]] else NULL
         })
+        edges <- edges[!purrr::map_lgl(edges, is.null)]
+        do.call(Row, c(integrate_edge_list(edges), row_no = i))
+    })
     do.call(Table, new_rows)
 }
 
@@ -280,7 +285,7 @@ Cell <- function(table, i, j) {
                       paste(j, collapse = ",")), call. = FALSE)
     }
 
-    rows <- purrr::map(start_row:end_row, \(rowno) {
+    edges <- purrr::map(start_row:end_row, \(rowno) {
         isBoundary   <- rowno %in% c(start_row, end_row)
         isHeaderLine <- rowno == 2 *  attr(table, "header") + 1 && rowno == end_row
         isFooterLine <- (rowno == 2 * attr(table, "footer") - 1 && rowno == start_row) ||
@@ -293,9 +298,9 @@ Cell <- function(table, i, j) {
             else if (isFooterLine) SYMBOL$FOOTER
             else if (isBoundary)   SYMBOL$LINE
             else                   purrr::pluck(content, rowno - start_row, .default = "") 
-        Row(Edge(leftnode, rightnode, edge_content, align))
+        Edge(leftnode, rightnode, edge_content, align)
     })
-    do.call(Table, rows)
+    structure(edges, start = start_row, end = end_row, class = "Cell")
 }
 
 valid_merged_cell <- function(merged_cell, gridtable) {
@@ -689,7 +694,7 @@ toString.GridTable <- function(gtable, ...) {
         purrr::map(seq_len(colnum), \(j) Cell(gtable, i, j))
     }) 
     cells <- do.call(c, cells)  
-    Table <- merge_table_list(cells)
+    Table <- merge_cell_list(cells)
 
     # for (i in seq_len(rownum)) {
     #     for (j in seq_len(colnum)) {

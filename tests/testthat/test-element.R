@@ -33,13 +33,8 @@ gdt <- GridTable(dt, header = 3, align = "lrrr") |>
     bind_cell(c(1,2), c(2,4)) |>
     bind_cell(c(4,5), 2, drop_content = TRUE, middle = TRUE)
 
-
-
-
 toString.GridTable(gdt) %>% str()
 
-
-    str(gdt)
 set_attr(gdt, "width", "B/2")
 set_attr(gdt, "width", "B-3")
 
@@ -49,14 +44,9 @@ out <- file.path(Sys.getenv("NUTSTORE"),
                             "论文/IIA 和国际直接投资/写作/iia_ma",
                             "基本模型回归结果.Rds") |>
         readRDS()
-out <- out$out
-gdt <- simple_to_grid(out)
+out <- simple_to_grid(out$out)
 
-
-
-
-system.time(gdt <- simple_to_grid(out))
-system.time(x <- toString(gdt))
+system.time(print(out))
 
 
 grepl(valid_regex, simple[2], perl = TRUE)
