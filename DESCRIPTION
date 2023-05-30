@@ -13,5 +13,4 @@ RoxygenNote: 7.2.3
 Depents:
     R (>= 4.0.0),
     purrr,
-    stringr,
     data.table
