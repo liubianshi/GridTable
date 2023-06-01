@@ -399,8 +399,11 @@ GridTable <- function(data, align = NULL,
 
 height_of <- function(df, base = NULL) {
     h <- purrr::map_int(1:nrow(df), \(i) {
-         purrr::map_int(df[i, ], \(x) sum(gregexpr("\n", x)[[1]] > 0)) |>
-         max()
+        purrr::map_int(
+            df[i, ],
+            \(x) if (is.na(x)) 0 else sum(gregexpr("\n", x)[[1]] > 0)
+        ) |>
+        max()
     }) + 1
     if (is.null(base)) return(h)
     else               return(ifelse(h > base, h, base))
@@ -902,8 +905,10 @@ valid_align <- function(data, align = NULL) {
             })
     } else if (is.character(align)) {
         stopifnot(length(align) %in% c(1, length(data)))
-        if (length(align) == 1) 
-            align <- rep(strsplit(align, "")[[1]], length(data))
+        if (length(align) == 1)  {
+            align <- strsplit(align, "")[[1]]
+            if (length(align) == 1) align <- rep(align, length(data))
+        }
         stopifnot(all(align %in% c("l", "r", "c")))
     } else {
         stop("align needed to be a character or character vector", call. = FALSE)
