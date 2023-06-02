@@ -1,9 +1,5 @@
 context("Test element")
 
-e11 <- Edge(r11, r12, "-")
-e12 <- Edge(r11, r13, "-")
-edge_relation(e11, e12)
-edge_merge(e11, e12)
 
 r11 <- Node(Coordinate(1L, 1L), "+")
 r12 <- Node(Coordinate(1L, 9L), "+")
@@ -16,8 +12,11 @@ e1  <- Row(Edge(r11, r12, "-", "l"))
 e2  <- Row(Edge(r21, r22, "test"))
 e3  <- Row(Edge(r31, r32, "-"))
 T <- Table(e1, e2, e3)
-edge_relation(e1, e2)
 
+e11 <- Edge(r11, r12, "-")
+e12 <- Edge(r11, r13, "-")
+edge_relation(e11, e12)
+edge_merge(e11, e12)
 
 
 dt <- data.table::fread("
@@ -55,9 +54,4 @@ cc <- GridTable(mtcars[1:5, 1:5])
 merge_cells(cc, 1, 1:2, wrap = TRUE)
 cc
 str(cc)
-
-
-gdt <-  do.call(rbind, re) |>
-        as.data.table() |>
-        GridTable(header = 2, align = "lrrrrrr")
 

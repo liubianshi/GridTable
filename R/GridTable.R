@@ -141,7 +141,8 @@ cell_content <- function(table, i = NULL, j = NULL, info = NULL) {
         apply(as.matrix(table[i, j]), 2, paste, collapse = "\n")
     }
     content <- unlist(strsplit(content, "\n"))
-    content <- content[grepl("\\S", content, perl = TRUE)]
+    content <- content[!grepl("^\\s*(&nbsp;)?\\s*$", content, perl = TRUE)]
+    
     if (length(content) == 0) return("")
 
     if (length(content) > info$row$num - 2) {
@@ -356,9 +357,40 @@ format_column <- function(x, digits = 3L, ...) {
 
     if (max_origin_digits == 0L) return(as.character(x))
 
-    lbs::stformat(x, digits = min(digits, max_origin_digits)) |>
+    purrr::map_chr(x, format_one_num, digits = digits, ...) |>
     trimws()
 }
+
+format_one_num <- function(z, digits, nsmall = 3L,
+                           width = NULL, na.replace = "", big.mark = ",") {
+    stopifnot(is.numeric(z) && length(z) == 1L)
+    if (is.null(digits)) stop("Must set digits", call. = FALSE)
+    stopifnot(is.null(width) || width > digits) 
+    
+    if (is.na(z))      return(na.replace)
+    if (is.integer(z)) return(format(z, width = width, big.mark = big.mark))
+    if (is.null(width)) width = digits + 3
+
+    digits <- as.integer(digits)
+    decbits <- if (abs(z) < 1) width - 0
+               else            width - as.integer(log10(abs(round(z, digits = 0L)))) - 2
+    
+    if (decbits >= digits) {
+        round(z, digits = digits) |>
+        format(digits = digits, nsmall = digits, width = width)
+    } else if (decbits > 0) {
+        round(z, digits = digits) |>
+        format(digits = decbits, nsmall = decbits,
+               width = width, bit.mark = big.mark)
+    } else {
+        round(z, digits = 0) |>
+        fomart(width = width, big.mark = big.mark)
+    }
+}
+
+
+
+
 
 get_cells_from <- function(gtable) {
     rownum <- nrow(gtable)
@@ -769,7 +801,6 @@ sort_edge_list <- function(edge_list) {
     index <- lcol_nos * max(rcol_nos) + rcol_nos
     edge_list[order(index)]
 }
-
 
 str_width <- function(x) nchar(x, type = "width")
 str_match <- function(x, pattern) regmatches(x, regexec(pattern, x))
