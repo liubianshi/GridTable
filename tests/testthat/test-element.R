@@ -47,11 +47,6 @@ set_attr(re, "header", 2)
 set_attr(re, header = 2)
 set_attr(re, width = "B/2")
 merge_cells(re, 1, 2:7)
-system.time(print(re))
+# system.time(print(re))
 
-
-cc <- GridTable(mtcars[1:5, 1:5])
-merge_cells(cc, 1, 1:2, wrap = TRUE)
-cc
-str(cc)
 
