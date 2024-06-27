@@ -115,10 +115,10 @@ cell_position_info <- function(table, i, j) {
 
     table_footer_rows <- purrr::map(attr(table, "footer"), \(f) {
         if (is.null(f) || is.infinite(f) || f <= 0) return(c(-1, -1))
-        c(sum(height[1:(f-1)] + 1) + 1, sum(height[1:f] + 1) + 1)
+        c(sum(height[1:(f-1)] + 1) + 1, sum(height + 1) + 1)
     })
     row$isFooterLine$start <- row$start %in% purrr::map_int(table_footer_rows, 1)
-    row$isFooterLine$end  <- row$en %in% purrr::map_int(table_footer_rows, 2)
+    row$isFooterLine$end   <- row$end %in% purrr::map_int(table_footer_rows, 2)
 
     list(col = col, row = row)
 }
