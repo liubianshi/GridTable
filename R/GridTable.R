@@ -50,7 +50,7 @@ Cell <- function(tbl, i, j) {
 
     edges <- purrr::map(info$row$start:info$row$end, \(rowno) {
         node_symbol  <- if      (rowno == info$row$start) SYMBOL$VERTICE
-                        else if (rowno == info$row$end)   SYMBOL$VERTICE 
+                        else if (rowno == info$row$end)   SYMBOL$VERTICE
                         else                              SYMBOL$SIDE
 
         leftnode     <- Node(Coordinate(rowno, info$col$start), node_symbol)
@@ -136,7 +136,7 @@ cell_content <- function(tbl, i = NULL, j = NULL, info = NULL) {
         info <- c(cell_merge_info(tbl, i, j), cell_position_info(tbl, i, j))
     }
     content <- if (isTRUE(info$drop_content)) {
-        tbl[i[1], j[1]]                   
+        tbl[i[1], j[1]]
     } else {
         subm <- as.matrix(tbl)[i, j]
         dim(subm) <- c(length(i), length(j))
@@ -174,25 +174,25 @@ cell_content <- function(tbl, i = NULL, j = NULL, info = NULL) {
 column_start_end_points <-  function (line, sep = " ") {
     line_width <- str_width(line)
     sep_p <- which(strsplit(line, "")[[1]] == sep)
-    if (length(sep_p) == 0) 
+    if (length(sep_p) == 0)
         return(NULL)
     keep <- purrr::map_lgl(seq_along(sep_p), function(x) {
-        if (x == 1) 
+        if (x == 1)
             return(TRUE)
-        if (x == length(sep_p)) 
+        if (x == length(sep_p))
             return(TRUE)
-        if (sep_p[x] - sep_p[x - 1] == 1 && sep_p[x + 1] - sep_p[x] == 1) 
+        if (sep_p[x] - sep_p[x - 1] == 1 && sep_p[x + 1] - sep_p[x] == 1)
             return(FALSE)
         return(TRUE)
     })
     sep_p <- sep_p[keep]
     start_end_points <- unlist(purrr::map(seq_along(sep_p), function(i) {
         if (i == 1) {
-            return(if (all(sep_p[1:2] == 1:2)) NULL else if (sep_p[1] == 
+            return(if (all(sep_p[1:2] == 1:2)) NULL else if (sep_p[1] ==
                 1) 2 else c(1, sep_p[1] - 1))
         }
         if (i == length(sep_p)) {
-            if (all(sep_p[length(sep_p) - 1:0] == line_width - 
+            if (all(sep_p[length(sep_p) - 1:0] == line_width -
                 1:0)) {
                 return(NULL)
             }
@@ -201,9 +201,9 @@ column_start_end_points <-  function (line, sep = " ") {
             }
             return(c(sep_p[length(sep_p)] + 1, line_width))
         }
-        if (sep_p[i] == sep_p[i - 1] + 1) 
+        if (sep_p[i] == sep_p[i - 1] + 1)
             return(sep_p[i] + 1)
-        if (sep_p[i] == sep_p[i + 1] - 1) 
+        if (sep_p[i] == sep_p[i + 1] - 1)
             return(sep_p[i] - 1)
         return(c(sep_p[i] - 1, sep_p[i] + 1))
     }))
@@ -295,12 +295,12 @@ edge_merge <- function(e1, e2) {
             if ((e1$type[1] == "Normal" && e2$type[1] != "Empty") ||
                 (e1$type[1] != "Empty"  && e2$type[1] == "Normal")) {
                 stop("Content Overlapping", call. = FALSE)
-            } 
+            }
             if (e1$type[1] == "Empty" || sum(c("HEADER", "FOOTER") %in% e2$type)) {
                 e1 <- edge_update(e1, content = e2$content,
                                       type = e2$type,
                                       symbol = e2$symbol)
-            } 
+            }
             list(e1)
         },
         CONTAIN = {
@@ -367,8 +367,8 @@ format_one_num <- function(z, digits, nsmall = 3L,
                            width = NULL, na.replace = "", big.mark = ",") {
     stopifnot(is.numeric(z) && length(z) == 1L)
     if (is.null(digits)) stop("Must set digits", call. = FALSE)
-    stopifnot(is.null(width) || width > digits) 
-    
+    stopifnot(is.null(width) || width > digits)
+
     if (is.na(z))      return(na.replace)
     if (is.integer(z)) return(format(z, width = width, big.mark = big.mark))
     if (is.null(width)) width = digits + 3
@@ -376,7 +376,7 @@ format_one_num <- function(z, digits, nsmall = 3L,
     digits <- as.integer(digits)
     decbits <- if (abs(z) < 1) width - 0
                else            width - as.integer(log10(abs(round(z, digits = 0L)))) - 2
-    
+
     if (decbits >= digits) {
         round(z, digits = digits) |>
         format(digits = digits, nsmall = digits, width = width)
@@ -397,7 +397,7 @@ get_cells_from <- function(gtable) {
         purrr::map(seq_len(colnum), \(j) {
           Cell(gtable, i, j)
       })
-    }) 
+    })
     do.call(c, cells)
 }
 
@@ -450,7 +450,7 @@ integrate_edge_list <- function(edge_list) {
     if (length(edge_list) == 1) return(old)
 
     new <- list(shift(old))
-    temp <- list(shift(old)) 
+    temp <- list(shift(old))
     while (length(old) > 0 || length(temp) > 0) {
         e <- if (length(temp) == 0)         shift(old)
              else if (length(old)  == 0)    shift(temp)
@@ -469,7 +469,7 @@ integrate_edge_list <- function(edge_list) {
 
 is_overlaped <- function(x, y) {
     stopifnot(length(x) == 2 && length(y) == 2)
-    get <- function(x, i) if (is.atomic(x))        x[i]     else x[[i]] 
+    get <- function(x, i) if (is.atomic(x))        x[i]     else x[[i]]
     min <- function(z)    if (get(z,1) < get(z,2)) get(z,1) else get(z,2)
     max <- function(z)    if (get(z,1) < get(z,2)) get(z,2) else get(z,1)
     !(min(x) > max(y) || min(y) > max(x))
@@ -536,7 +536,7 @@ merge_cells <- function(tbl, i = NULL, j = NULL, cancel = NULL, ...) {
         })
         return(invisible(tbl))
     }
-    
+
     merged_cell_name <- if (!is.null(i) && !is.null(j)) {
         paste(paste(unique(minmax(i)), collapse = ":"),
               paste(unique(minmax(j)), collapse = ":"),
@@ -555,7 +555,7 @@ merge_cells <- function(tbl, i = NULL, j = NULL, cancel = NULL, ...) {
         data.table::setattr(tbl, "merged_cells", old_merged_cell)
         return(invisible(tbl))
     }
-    
+
     merged_cell <- c(valid_merged_cell(i, j, tbl), list(...))
     purrr::walk(old_merged_cell, \(m1, m2) {
         if (is_overlaped(m1$rows, m2$rows) && is_overlaped(m1$cols, m2$cols)) {
@@ -652,7 +652,7 @@ parse_number_adjust <- function(num, x) {
         as.integer(elements[1])
     } else if (grepl("^[A-Za-z]+$", elements[1])) {
         which(LETTERS == strsplit(toupper(elements[1]), "")[[1]]) |> sum()
-    } 
+    }
     if (is.null(index)) return(NULL)
 
     stopifnot(index <= length(num))
@@ -748,7 +748,7 @@ Row <- function(..., row_no = NULL) {
         if (i == length(edges)) nodes[[i+1]] = edges[[i]]$rightnode
         nodes[[i]] = edges[[i]]$leftnode
     }
-    
+
     structure(list(nodes = nodes,
                    edges = edges,
                    n = length(nodes),
@@ -767,8 +767,8 @@ set_attr <- function(tbl, attr = NULL, value = NULL, ...) {
         height =,
         width  = {
             if (is.numeric(value)) {
-                if (attr == "height") stopifnot(length(value) != nrow(tbl))
-                if (attr == "width")  stopifnot(length(value) != ncol(tbl))
+                if (attr == "height") stopifnot(length(value) == nrow(tbl))
+                if (attr == "width")  stopifnot(length(value) == ncol(tbl))
                 data.table::setattr(tbl, attr, value)
             } else {
                 data.table::setattr(tbl, attr,
@@ -781,7 +781,7 @@ set_attr <- function(tbl, attr = NULL, value = NULL, ...) {
 }
 
 shift <- function (x, drop = TRUE) {
-    if (length(x) == 0) 
+    if (length(x) == 0)
         return(NULL)
     outer_x <- as.character(substitute(x))
     shiftret <- if (isTRUE(drop) && is.list(x)) {
@@ -850,7 +850,7 @@ Table <- function(...) {
         which_row <- which(row_nos == .x)
         if (length(which_row) != 0)   rows[[which_row]]
         else                          Row(row_no = .x)
-        
+
     })
     structure(list(rows = rows, length = length, width = width),
               class = "Table")
@@ -928,7 +928,7 @@ toString.Table <- function(tbl, drop_empty_line = TRUE, ...) {
 
 valid_align <- function(data, align = NULL) {
     if (is.null(align)) {
-        align <- 
+        align <-
             purrr::map_chr(data, \(x) {
                 switch(class(x),
                     character = "l",
@@ -954,7 +954,7 @@ valid_merged_cell <- function(rows, cols, gridtable) {
 
     merged_cell <-
         purrr::map(list(rows = rows, cols = cols), \(x) {
-            mM <- minmax(x) 
+            mM <- minmax(x)
             if (length(x) > 2) stopifnot(all(sort(x) == mM[1]:mM[2]))
             mM
         })
