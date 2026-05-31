@@ -269,8 +269,8 @@ set_attr <- function(tbl, attr = NULL, value = NULL, ...) {
         height =,
         width  = {
             if (is.numeric(value)) {
-                if (attr == "height") stopifnot(length(value) != nrow(tbl))
-                if (attr == "width")  stopifnot(length(value) != ncol(tbl))
+                if (attr == "height") stopifnot(length(value) == nrow(tbl))
+                if (attr == "width")  stopifnot(length(value) == ncol(tbl))
                 data.table::setattr(tbl, attr, value)
             } else {
                 data.table::setattr(tbl, attr,
