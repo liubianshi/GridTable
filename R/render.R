@@ -6,9 +6,7 @@
 #' maps every row to a line. These are building blocks of
 #' [toString.GridTable()]; users normally never call them directly.
 #'
-#' @param edge An `Edge` object.
-#' @param row A `Row` object.
-#' @param tbl A `Table` object.
+#' @param x An `Edge`, `Row`, or `Table` object (the geometry to render).
 #' @param drop_empty_line When `TRUE`, drop lines that carry no visible content
 #'   (only side bars/whitespace).
 #' @param ... Unused, for S3 signature compatibility.
@@ -18,7 +16,8 @@
 #' @rdname grid-tostring-internal
 #' @keywords internal
 #' @export
-toString.Edge <- function(edge) {
+toString.Edge <- function(x, ...) {
+    edge     <- x
     symbol_l <- if (col_no(edge$leftnode) == 1L) edge$leftnode$symbol else ""
     symbol_r <- edge$rightnode$symbol
     width    <- col_no(edge$rightnode) - col_no(edge$leftnode) - 1
@@ -47,15 +46,15 @@ toString.Edge <- function(edge) {
 #' @rdname grid-tostring-internal
 #' @keywords internal
 #' @export
-toString.Row <- function(row) {
-    paste0(purrr::map_chr(row$edges, toString.Edge), collapse = "")
+toString.Row <- function(x, ...) {
+    paste0(purrr::map_chr(x$edges, toString.Edge), collapse = "")
 }
 
 #' @rdname grid-tostring-internal
 #' @keywords internal
 #' @export
-toString.Table <- function(tbl, drop_empty_line = TRUE, ...) {
-    table_content <- purrr::map_chr(tbl$rows, ~ toString.Row(.x))
+toString.Table <- function(x, drop_empty_line = TRUE, ...) {
+    table_content <- purrr::map_chr(x$rows, ~ toString.Row(.x))
     if (isTRUE(drop_empty_line)) {
         table_content <- table_content[grepl("[^|\\s]", table_content, perl = TRUE)]
     }
@@ -76,7 +75,7 @@ toString.Table <- function(tbl, drop_empty_line = TRUE, ...) {
 #' ...". `toString.GridTable()` catches that condition and re-invokes itself
 #' until everything fits. Exceptions are used as control flow here by design.
 #'
-#' @param gtable A `GridTable` object.
+#' @param x A `GridTable` object.
 #' @param drop_empty_line When `TRUE` (default), drop rendered lines that carry
 #'   no visible content.
 #' @param ... Passed through to [toString.Table()].
@@ -91,7 +90,8 @@ toString.Table <- function(tbl, drop_empty_line = TRUE, ...) {
 #'
 #' @rdname print.GridTable
 #' @export
-toString.GridTable <- function(gtable, ...) {
+toString.GridTable <- function(x, ...) {
+    gtable <- x
     rownum <- nrow(gtable)
     colnum <- ncol(gtable)
     args <- list(...)
@@ -122,8 +122,8 @@ toString.GridTable <- function(gtable, ...) {
 
 #' @rdname print.GridTable
 #' @export
-print.GridTable <- function(gtable, drop_empty_line = TRUE, ...) {
-  content <- toString(gtable, drop_empty_line = drop_empty_line, ...)
+print.GridTable <- function(x, drop_empty_line = TRUE, ...) {
+  content <- toString(x, drop_empty_line = drop_empty_line, ...)
   cat(content, sep = "\n")
   invisible(content)
 }

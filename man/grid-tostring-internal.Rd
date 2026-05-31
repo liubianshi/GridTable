@@ -6,23 +6,19 @@
 \alias{toString.Table}
 \title{Render Low-Level Grid Geometry to Text}
 \usage{
-\method{toString}{Edge}(edge)
+\method{toString}{Edge}(x, ...)
 
-\method{toString}{Row}(row)
+\method{toString}{Row}(x, ...)
 
-\method{toString}{Table}(tbl, drop_empty_line = TRUE, ...)
+\method{toString}{Table}(x, drop_empty_line = TRUE, ...)
 }
 \arguments{
-\item{edge}{An \code{Edge} object.}
+\item{x}{An \code{Edge}, \code{Row}, or \code{Table} object (the geometry to render).}
 
-\item{row}{A \code{Row} object.}
-
-\item{tbl}{A \code{Table} object.}
+\item{...}{Unused, for S3 signature compatibility.}
 
 \item{drop_empty_line}{When \code{TRUE}, drop lines that carry no visible content
 (only side bars/whitespace).}
-
-\item{...}{Unused, for S3 signature compatibility.}
 }
 \value{
 A character string (\code{Edge}/\code{Row}) or character vector (\code{Table}).

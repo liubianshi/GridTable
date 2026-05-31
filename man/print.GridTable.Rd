@@ -5,12 +5,12 @@
 \alias{print.GridTable}
 \title{Render and Print a Grid Table}
 \usage{
-\method{toString}{GridTable}(gtable, ...)
+\method{toString}{GridTable}(x, ...)
 
-\method{print}{GridTable}(gtable, drop_empty_line = TRUE, ...)
+\method{print}{GridTable}(x, drop_empty_line = TRUE, ...)
 }
 \arguments{
-\item{gtable}{A \code{GridTable} object.}
+\item{x}{A \code{GridTable} object.}
 
 \item{...}{Passed through to \code{\link[=toString.Table]{toString.Table()}}.}
 
