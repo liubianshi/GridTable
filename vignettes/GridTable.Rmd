@@ -1,0 +1,213 @@
+---
+title: "Rendering Pandoc Grid Tables with GridTable"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Rendering Pandoc Grid Tables with GridTable}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = FALSE,
+  comment  = ""      # show the ASCII tables verbatim, no "## " prefix
+)
+library(GridTable)
+```
+
+## What `GridTable` does
+
+`GridTable` turns a `data.frame`, `data.table`, or `knitr::kable` into a
+plain-text **pandoc grid table** — the ASCII boxes drawn with `+ | - = :` that
+pandoc understands as a real table:
+
+```{r basic}
+df <- data.frame(name = c("Alice", "Bob"), score = c(91.5, 88))
+print(GridTable(df))
+```
+
+A few things already happened automatically:
+
+* the **column names** became the first row, and a header rule (`=`) was drawn
+  under them;
+* the numeric `score` column was formatted to a fixed number of decimals;
+* every column got a sensible width.
+
+The engine measures text with `nchar(type = "width")`, so wide (CJK) characters
+count as two columns and stay aligned — more on that at the end.
+
+A `GridTable` is just a `data.table` carrying its render state as attributes.
+You build it once, tweak it by reference, and `print()` it (or call
+`toString()` to get the lines as a character vector).
+
+## Per-column alignment
+
+Pass `align` as one code per column (`l`eft, `r`ight, `c`entre), or a single
+code recycled to all columns. Numeric columns default to right, character
+columns to left. The alignment governs the **body** text as well as the header
+rule's colons:
+
+```{r align}
+df <- data.frame(item = c("apples", "pie"), qty = c(4, 12), note = c("fresh", "warm"))
+print(GridTable(df, align = "lcr"))
+```
+
+## Header and footer rules
+
+`header` is the row index the header rule is drawn under (the default prepends
+the column names and uses `header = 1`). `footer` draws a rule above the given
+row and along the table bottom — handy for a totals row:
+
+```{r footer}
+sales <- data.frame(
+  region = c("North", "South", "Total"),
+  amount = c(120, 95, 215)
+)
+print(GridTable(sales, footer = 3))
+```
+
+## Captions
+
+Anything passed through `...` is stored as an attribute; `caption` is rendered
+above the table:
+
+```{r caption}
+print(GridTable(df, caption = "Table: today's order"))
+```
+
+## Merging cells
+
+`merge_cells(tbl, i, j)` registers a rectangular merged region spanning rows `i`
+and columns `j`. It modifies the table **by reference**. Remember that — with
+the default auto-header — the first *data* row is row 2.
+
+### Column span (a header across columns)
+
+```{r colspan}
+m <- matrix(
+  c("Location",   "Temp", "Temp",
+    "city",       "min",  "max",
+    "Antarctica", "-89.2", "19.8"),
+  ncol = 3, byrow = TRUE
+)
+gt <- GridTable(m, header = 2, align = "lrr")
+merge_cells(gt, i = 1, j = 2:3)   # "Temp" spans columns 2-3
+print(gt)
+```
+
+### Row span
+
+```{r rowspan}
+gt <- GridTable(data.frame(group = c("A", "A", "B"), value = c(1, 2, 3)))
+merge_cells(gt, i = 2:3, j = 1)   # merge the first data column across rows 2-3
+print(gt)
+```
+
+### Row and column span at once
+
+```{r rowcolspan}
+m <- matrix(c("H1",  "H2",  "H3",
+              "BIG", "BIG", "x",
+              "BIG", "BIG", "y"),
+            ncol = 3, byrow = TRUE)
+gt <- GridTable(m, header = 1)
+merge_cells(gt, i = 2:3, j = 1:2)
+print(gt)
+```
+
+## Merge options
+
+`merge_cells()` takes three options that change how a region's content is laid
+out.
+
+### `drop_content` — keep only the anchor cell
+
+By default the members of a region are joined together. With
+`drop_content = TRUE` only the top-left (anchor) cell's text is kept:
+
+```{r drop-content}
+m <- matrix(c("H1", "H2", "A", "B", "C", "D"), ncol = 2, byrow = TRUE)
+gt <- GridTable(m, header = 1)
+merge_cells(gt, i = 2:3, j = 1, drop_content = TRUE)
+print(gt)
+```
+
+### `middle` — vertical centring
+
+```{r middle}
+gt <- GridTable(data.frame(group = c("x", "y", "z"), value = c(1, 2, 3)))
+merge_cells(gt, i = 2:3, j = 1, middle = TRUE)
+print(gt)
+```
+
+### `wrap` — pandoc continuation lines
+
+`wrap` appends pandoc's continuation backslash to every line but the last, so a
+multi-line cell renders as one logical line when the table is re-processed by
+pandoc:
+
+```{r wrap}
+m <- matrix(c("H1",                             "H2",
+              "first line\nsecond line\nthird", "y"),
+            ncol = 2, byrow = TRUE)
+gt <- GridTable(m, header = 1)
+merge_cells(gt, i = 2, j = 1, wrap = TRUE)
+print(gt)
+```
+
+To list the regions registered on a table, call `merge_cells(tbl)` with no
+`i`/`j`; to remove one, pass `cancel = TRUE` (with the same `i`/`j`) or the
+region's name.
+
+## Adjusting widths and heights: the `set_attr` DSL
+
+The engine sizes everything to fit, but you can pin or nudge a column width or
+row height with `set_attr()`. Besides a plain numeric vector, `width` and
+`height` accept an adjustment string `<index><op><operand>`, where the index is
+a number or a letter (`A` = 1, `B` = 2, …) and the op is one of `+ - * / =`:
+
+```{r set-attr}
+gt <- GridTable(data.frame(a = c("x", "y"), b = c(1, 2)))
+set_attr(gt, "width", "1+3")   # widen column 1 by three display columns
+print(gt)
+```
+
+`set_attr()` can set any attribute, and several at once through `...`
+(e.g. `set_attr(gt, align = "c", caption = "...")`).
+
+## Starting from a `knitr::kable`
+
+If you already have a pipe- or simple-format `kable`, `kable_to_grid()`
+reverse-parses it (recovering the column boundaries from the separator line)
+into a `GridTable` you can then merge, align, or caption:
+
+```{r kable}
+kbl <- knitr::kable(
+  data.frame(City = c("Beijing", "Xian"), Pop = c(2189, 1295)),
+  format = "pipe"
+)
+print(kable_to_grid(kbl))
+```
+
+## CJK width awareness
+
+Because widths are measured in display columns, tables mixing wide and narrow
+characters stay aligned:
+
+```{r cjk}
+df <- data.frame(city = c("北京", "上海", "x"), pop = c(2189, 2487, 5))
+print(GridTable(df, align = "lr"))
+```
+
+## Summary
+
+The public surface is small:
+
+* `GridTable()` / `kable_to_grid()` — build a table;
+* `merge_cells()` — merge regions (`drop_content` / `middle` / `wrap`);
+* `set_attr()` — pin or adjust widths, heights, alignment, captions;
+* `print()` / `toString()` — render it.
+
+Everything is computed up front and laid out with local, CJK-aware decisions, so
+even tables that combine row+column spans with footers and wrapping render
+cleanly.
