@@ -4,7 +4,7 @@
       print(GridTable(dt))
     Output
       +-------+--------+
-      | Name  | Score  |
+      | Name  |  Score |
       +:======+=======:+
       | Alice | 91.500 |
       +-------+--------+
@@ -28,17 +28,15 @@
 
     Code
       print(gt)
-    Message
-      Message: Adjusted table height attribute due to multiline content
     Output
       +------------+---------------------------+
-      | Location   | Temperature               |
-      |            | Temperature               |
+      | Location   |               Temperature |
+      |            |               Temperature |
       +------------+-------------+-------------+
-      |            | min         | max         |
+      |            |         min |         max |
       +:===========+============:+============:+
-      | Antarctica | -89.2       | 19.8        |
+      | Antarctica |       -89.2 |        19.8 |
       +------------+-------------+-------------+
-      | Earth      | -50.1       | 56.7        |
+      | Earth      |       -50.1 |        56.7 |
       +------------+-------------+-------------+
 
