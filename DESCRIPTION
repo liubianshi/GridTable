@@ -1,12 +1,16 @@
 Package: GridTable
-Title: What the Package Does (One Line, Title Case)
+Title: Render Data Frames as Pandoc Grid Tables
 Version: 0.0.0.9001
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Authors@R:
+    person("liu.bian.shi", email = "uqejoanjennifern5YUEh@ninfan.com",
+           role = c("aut", "cre"))
+Description: Render a 'data.frame', 'data.table', or 'knitr::kable' into a
+    plain-text pandoc grid table drawn with ASCII box characters. The layout
+    engine is CJK-width aware, so tables containing Chinese or other wide
+    characters stay aligned. It supports merged cells, header and footer
+    separator lines, per-column alignment, content wrapping, and automatic
+    column-width and row-height growth so content always fits.
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Depends:

@@ -1,7 +1,24 @@
+#' Construct a character-grid coordinate
+#'
+#' A `(row, col)` pair indexing the **character grid** (not logical table
+#' cells). Both components are coerced to whole integers.
+#'
+#' @param x,y Integer-valued row and column positions.
+#' @return A length-2 integer vector of class `Coordinate`.
+#' @noRd
 Coordinate <- function(x, y) {
     structure(c(toInteger(x), toInteger(y)), class = "Coordinate")
 }
 
+#' Construct a grid node
+#'
+#' A point on the character grid carrying a drawing symbol: `+` for a vertex or
+#' `|` for a side.
+#'
+#' @param coordinate A `Coordinate`.
+#' @param symbol The node symbol, usually `SYMBOL$VERTICE` or `SYMBOL$SIDE`.
+#' @return A `Node` object.
+#' @noRd
 Node <- function(coordinate, symbol = "+") {
     stopifnot(class(coordinate) == "Coordinate" && is.character(symbol))
     structure(list(coordinate = coordinate,
@@ -9,6 +26,20 @@ Node <- function(coordinate, symbol = "+") {
               class = "Node")
 }
 
+#' Construct a grid edge
+#'
+#' A horizontal segment between two nodes on the **same** row. It carries the
+#' span's `content`, `align`, and a derived `type` (`Normal`/`Empty`/`HEADER`/
+#' `FOOTER`/`LINE`). Whitespace-only content resolves to `Empty` before any
+#' border-symbol derivation; border edges (bounded by vertices/sides) derive
+#' their `type`/`symbol` from the single drawing character in `content`.
+#'
+#' @param leftnode,rightnode `Node`s bounding the segment; left must precede
+#'   right and share its row.
+#' @param content A length-1 string: the cell text or a border run.
+#' @param align Optional alignment code (`l`/`r`/`c`).
+#' @return An `Edge` object.
+#' @noRd
 Edge <- function(leftnode, rightnode, content, align = NULL) {
     stopifnot(class(leftnode)  == "Node" &&
               class(rightnode) == "Node" &&
@@ -44,6 +75,16 @@ Edge <- function(leftnode, rightnode, content, align = NULL) {
               class = "Edge")
 }
 
+#' Construct a grid row
+#'
+#' An ordered set of edges plus the nodes shared between adjacent edges. Edges
+#' are sorted by column; adjacent edges must meet (left node of one equals right
+#' node of the previous), and their shared nodes are merged via `node_merge()`.
+#'
+#' @param ... `Edge` objects (none if building an empty row by `row_no`).
+#' @param row_no Row number; required when no edges are supplied.
+#' @return A `Row` object.
+#' @noRd
 Row <- function(..., row_no = NULL) {
     edges <- list(...)
     stopifnot(!(length(edges) == 0L && is.null(row_no)))
@@ -73,6 +114,15 @@ Row <- function(..., row_no = NULL) {
                    row_no = row_no(edges[[1]])), class = "Row")
 }
 
+#' Assemble a grid table from rows
+#'
+#' A list of `Row`s padded to the full height: missing row numbers are filled
+#' with empty rows so the table spans `1:max(row_no)`. Records the overall
+#' character `length` (rows) and `width` (columns).
+#'
+#' @param ... `Row` objects with unique `row_no`s.
+#' @return A `Table` object.
+#' @noRd
 Table <- function(...) {
     rows    <- list(...)
     row_nos <- purrr::map_int(rows, "row_no")
@@ -92,6 +142,16 @@ Table <- function(...) {
               class = "Table")
 }
 
+#' Construct an empty row
+#'
+#' Either a node-less placeholder row (when no column bounds are given) or a row
+#' holding a single whitespace edge spanning the given columns.
+#'
+#' @param row_no Row number.
+#' @param left_col_no,right_col_no Optional column bounds for a spanning empty
+#'   edge; both or neither.
+#' @return A `Row` object.
+#' @noRd
 empty_row <- function(row_no, left_col_no = NULL, right_col_no = NULL) {
     stopifnot(is.null(left_col_no) == is.null(right_col_no))
     if (is.null(left_col_no) || is.null(right_col_no)) {
@@ -106,11 +166,24 @@ empty_row <- function(row_no, left_col_no = NULL, right_col_no = NULL) {
     Row(Edge(leftnode, rightnode, " "))
 }
 
+#' Last (right-most) node of a row
+#'
+#' @param row A `Row`.
+#' @return The right-most `Node`, or `NULL` for an empty row.
+#' @noRd
 last_node <- function(row) {
     if (row$n == 0) return(NULL)
     else            return(row$nodes[[row$n]])
 }
 
+#' Merge two coincident nodes
+#'
+#' Collapse two nodes sharing a coordinate into one, preferring a vertex (`+`)
+#' over a side (`|`). `NULL` operands pass through.
+#'
+#' @param n1,n2 `Node`s (or `NULL`); must share a coordinate when both present.
+#' @return A single `Node`.
+#' @noRd
 node_merge <- function(n1, n2) {
     if (is.null(n1)) return(n2)
     if (is.null(n2)) return(n1)
@@ -119,6 +192,15 @@ node_merge <- function(n1, n2) {
     return(n1)
 }
 
+#' Return an edge with some fields replaced
+#'
+#' Functional update: copy `e` and overwrite the named list elements (e.g.
+#' `leftnode`, `rightnode`, `content`, `align`, `type`, `symbol`).
+#'
+#' @param e An `Edge`.
+#' @param ... Named fields to overwrite.
+#' @return The updated `Edge`.
+#' @noRd
 edge_update <- function(e, ...) {
     attrs <- list(...)
     for (i in seq_along(attrs)) {
@@ -127,39 +209,84 @@ edge_update <- function(e, ...) {
     e
 }
 
+#' Join two adjacent edges at their shared node
+#'
+#' Merge the right node of `e1` with the left node of `e2` and write the merged
+#' node back into both, so the pair shares a single boundary node.
+#'
+#' @param e1,e2 Adjacent `Edge`s (right node of `e1` coincides with left of `e2`).
+#' @return A length-2 list of the two updated edges.
+#' @noRd
 edge_left_extend <- function(e1, e2) {
     updated_node <- node_merge(e1$rightnode, e2$leftnode)
     return(list(edge_update(e1, rightnode = updated_node),
                 edge_update(e2, leftnode = updated_node)))
 }
 
+#' Comparison Operators for Grid Nodes and Edges
+#'
+#' S3 comparison operators defined so that `Node` and `Edge` objects can be
+#' ordered and compared inside the edge-merge algorithm (see `edge_merge()` and
+#' `integrate_edge_list()`). Nodes compare by column number within the same row;
+#' edges compare by their left node. Equality compares grid coordinates.
+#'
+#' @param n1,n2 `Node` objects (must share a row for `<`/`>`).
+#' @param e1,e2 `Edge` objects.
+#'
+#' @return A logical scalar.
+#'
+#' @rdname grid-compare-operators
+#' @keywords internal
 #' @export
 `<.Node` <- function(n1, n2) {
     stopifnot(row_no(n1) == row_no(n2))
     col_no(n1) < col_no(n2)
 }
 
+#' @rdname grid-compare-operators
+#' @keywords internal
 #' @export
 `>.Node` <- function(n1, n2) {
     stopifnot(row_no(n1) == row_no(n2))
     col_no(n1) > col_no(n2)
 }
 
+#' @rdname grid-compare-operators
+#' @keywords internal
 #' @export
 `==.Node` <- function(n1, n2) {
     all(n1$coordinate == n2$coordinate)
 }
 
+#' @rdname grid-compare-operators
+#' @keywords internal
 #' @export
 `==.Edge` <- function(e1, e2) {
     e1$leftnode == e2$leftnode && e1$rightnode == e2$rightnode
 }
 
+#' @rdname grid-compare-operators
+#' @keywords internal
 #' @export
 `<.Edge` <- function(e1, e2) {
     e1$leftnode < e2$leftnode
 }
 
+#' Row Number of a Grid Geometry Object
+#'
+#' Extract the character-grid row number of a geometry object. It dispatches on
+#' the object's class: a `Coordinate`'s first element, a `Node`/`Edge`'s
+#' coordinate, or a `Row`'s stored `row_no`.
+#'
+#' @param x A `Coordinate`, `Node`, `Edge`, or `Row` object.
+#'
+#' @return An integer row number.
+#'
+#' @examples
+#' # The geometry classes are internal; reach one to demonstrate dispatch.
+#' co <- GridTable:::Coordinate(3, 1)
+#' row_no(co)
+#'
 #' @export
 row_no <- function(x) {
     switch(class(x),
@@ -171,6 +298,14 @@ row_no <- function(x) {
     )
 }
 
+#' Column number(s) of a grid geometry object
+#'
+#' Companion to [row_no()]: a `Coordinate`'s column, a `Node`'s column, an
+#' `Edge`'s `c(left, right)` columns, or the column of each element of a list.
+#'
+#' @param x A `Coordinate`, `Node`, `Edge`, or list thereof.
+#' @return An integer (or integer vector) column number.
+#' @noRd
 col_no <- function(x) {
     switch(class(x),
         Coordinate = x[2],
@@ -181,6 +316,11 @@ col_no <- function(x) {
     )
 }
 
+#' Do all objects lie on the same row?
+#'
+#' @param ... Geometry objects accepted by [row_no()].
+#' @return `TRUE` if every object shares one row number.
+#' @noRd
 row_no_allequal <- function(...) {
     args <- list(...)
     row_nos <- purrr::map(args, row_no) |> unlist() |> unique()

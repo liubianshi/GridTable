@@ -1,3 +1,15 @@
+#' Build the set of edges for one logical cell
+#'
+#' Produce the bounding-box edges (top border, content lines, bottom border) of
+#' the cell at table position `(i, j)`, already aware of merging and of header/
+#' footer separator lines. For a non-first cell of a merged region it returns
+#' `NULL`.
+#'
+#' @param tbl A `GridTable`.
+#' @param i,j Logical table row/column indices.
+#' @return A `Cell` (list of `Edge`s with `start`/`end` row attributes), or
+#'   `NULL`.
+#' @noRd
 Cell <- function(tbl, i, j) {
     info <- cell_merge_info(tbl, i, j)
     if (isTRUE(info$merged) && isFALSE(info$first_cell)) {
@@ -36,6 +48,18 @@ Cell <- function(tbl, i, j) {
     structure(edges, start = info$row$start, end = info$row$end, class = "Cell")
 }
 
+#' Resolve a cell's merge membership
+#'
+#' Determine whether `(i, j)` belongs to a registered merged region; if so,
+#' expand `i`/`j` to the region's full row/column spans, flag whether this is the
+#' region's first (top-left) cell, and fold in the region's merge options
+#' (`drop_content`/`middle`/`wrap`).
+#'
+#' @param tbl A `GridTable`.
+#' @param i,j Scalar logical row/column indices.
+#' @return A metadata list: `merged`, `first_cell`, expanded `i`/`j`, and the
+#'   merge options.
+#' @noRd
 cell_merge_info <- function(tbl, i, j) {
     stopifnot(inherits(tbl, "GridTable"))
     stopifnot(length(i) == 1 && length(j) == 1)
@@ -58,6 +82,17 @@ cell_merge_info <- function(tbl, i, j) {
     meta
 }
 
+#' Map a logical cell to character-grid spans
+#'
+#' Convert table coordinates `(i, j)` into character-grid `col`/`row` `start`/
+#' `num`/`end` spans using the `height`/`width` attributes, and flag whether the
+#' span's top/bottom edge coincides with the header or a footer separator line.
+#'
+#' @param tbl A `GridTable`.
+#' @param i,j Logical row/column index spans.
+#' @return A list with `col` and `row` span info (including `isHeaderLine` /
+#'   `isFooterLine`).
+#' @noRd
 cell_position_info <- function(tbl, i, j) {
     height <- attr(tbl, "height")
     width  <- attr(tbl, "width")
@@ -84,6 +119,24 @@ cell_position_info <- function(tbl, i, j) {
     list(col = col, row = row)
 }
 
+#' Compute a cell's content lines, growing the table to fit
+#'
+#' Assemble the (possibly multi-row, multi-column) text for a cell, split it into
+#' lines, drop blank/`&nbsp;` lines, and optionally `wrap`/vertically-centre
+#' (`middle`) it.
+#'
+#' **Auto-fit via exceptions (intentional).** If the content is taller than the
+#' cell, this function grows the table's `height` attribute in place (through
+#' [set_attr()]) and `stop()`s with "Adjust the height"; if it is wider, it grows
+#' the `width` attribute in place and `stop()`s with "Adjust the width".
+#' [toString.GridTable()] catches these and retries. Do not "fix" this into a
+#' plain error path — the mutate-then-`stop` is the resize signal.
+#'
+#' @param tbl A `GridTable`.
+#' @param i,j Logical row/column index spans (optional if `info` is given).
+#' @param info Pre-computed merge + position info (optional).
+#' @return A character vector of content lines (`""` when empty).
+#' @noRd
 cell_content <- function(tbl, i = NULL, j = NULL, info = NULL) {
     if ((is.null(i) || is.null(j)) && is.null(info)) {
         stop("Need set i and j or set info", call. = FALSE)
@@ -131,6 +184,14 @@ cell_content <- function(tbl, i = NULL, j = NULL, info = NULL) {
     content
 }
 
+#' Build a flat list of cells for the whole table
+#'
+#' Construct a `Cell` for every `(i, j)` (row-major) and flatten to one list;
+#' merged non-first cells come back as `NULL`.
+#'
+#' @param gtable A `GridTable`.
+#' @return A flat list of `Cell`s (with `NULL`s for absorbed merge cells).
+#' @noRd
 get_cells_from <- function(gtable) {
     rownum <- nrow(gtable)
     colnum <- ncol(gtable)
@@ -142,6 +203,16 @@ get_cells_from <- function(gtable) {
     do.call(c, cells)
 }
 
+#' Merge per-cell edges into a unified table
+#'
+#' Drop `NULL` cells, regroup every cell's edges by character row, and run
+#' `integrate_edge_list()` on each row so shared borders between neighbouring
+#' cells collapse into single characters; assemble the merged rows into a
+#' `Table`.
+#'
+#' @param cells A list of `Cell`s (as from `get_cells_from()`).
+#' @return A `Table` of merged geometry, ready to render.
+#' @noRd
 merge_cell_list <- function(cells) {
     cells <- cells[!purrr::map_lgl(cells, is.null)]
     purrr::walk(cells, \(c) stopifnot(inherits(c, "Cell")))

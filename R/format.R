@@ -1,3 +1,14 @@
+#' Format one table column to character
+#'
+#' Trim character columns, stringify integer columns, and format numeric columns
+#' with `format_one_num()` (skipping the per-number formatting when the column
+#' has no decimal digits).
+#'
+#' @param x An atomic column vector.
+#' @param digits Significant digits for numeric formatting.
+#' @param ... Forwarded to `format_one_num()`.
+#' @return A character vector.
+#' @noRd
 format_column <- function(x, digits = 3L, ...) {
     stopifnot(is.atomic(x))
     if (is.character(x)) return(trimws(x))
@@ -15,6 +26,20 @@ format_column <- function(x, digits = 3L, ...) {
     trimws()
 }
 
+#' Format a single number for display
+#'
+#' Render one numeric scalar to a fixed-width string, choosing the number of
+#' decimal places from the magnitude and target width, grouping thousands with
+#' `big.mark`, and substituting `na.replace` for `NA`.
+#'
+#' @param z A length-1 numeric.
+#' @param digits Significant digits.
+#' @param nsmall Minimum decimal places.
+#' @param width Target field width (defaults to `digits + 3`).
+#' @param na.replace String used for `NA`.
+#' @param big.mark Thousands separator.
+#' @return A length-1 formatted string.
+#' @noRd
 format_one_num <- function(z, digits, nsmall = 3L,
                            width = NULL, na.replace = "", big.mark = ",") {
     stopifnot(is.numeric(z) && length(z) == 1L)
@@ -42,6 +67,11 @@ format_one_num <- function(z, digits, nsmall = 3L,
     }
 }
 
+#' Display width needed for a column
+#'
+#' @param x A character column.
+#' @return The maximum display width across non-`NA` (trimmed) entries.
+#' @noRd
 cal_column_width <- function(x) {
     x <- x[!is.na(x)]
     trimws(x) |>
@@ -49,6 +79,15 @@ cal_column_width <- function(x) {
     max()
 }
 
+#' Per-row height (line count) of a data frame
+#'
+#' Each row's height is one plus the largest number of embedded newlines across
+#' its cells, optionally floored at `base`.
+#'
+#' @param df A data frame of character cells.
+#' @param base Optional minimum height per row.
+#' @return An integer vector of row heights.
+#' @noRd
 height_of <- function(df, base = NULL) {
     h <- purrr::map_int(1:nrow(df), \(i) {
         purrr::map_int(
@@ -61,6 +100,18 @@ height_of <- function(df, base = NULL) {
     else               return(ifelse(h > base, h, base))
 }
 
+#' Apply a width/height adjustment expression
+#'
+#' Parse an adjustment string of the form `<index><op><operand>` and apply it to
+#' the numeric vector `num`. The `index` is a number or a letter (`A` = 1,
+#' `B` = 2, ...); `op` is one of `+ - * / =` (omitted means `=`); `operand` is an
+#' integer. A vector of expressions is applied left to right. Backs the
+#' `width`/`height` DSL of [set_attr()].
+#'
+#' @param num The current numeric vector (existing widths or heights).
+#' @param x One adjustment string, or a vector of them.
+#' @return The adjusted numeric vector, or `NULL` if `x` does not parse.
+#' @noRd
 parse_number_adjust <- function(num, x) {
     stopifnot(is.character(x))
     if (!is.atomic(x)) {
@@ -100,6 +151,16 @@ parse_number_adjust <- function(num, x) {
     num
 }
 
+#' Recover column boundaries from a kable separator line
+#'
+#' Reverse-parse the `---`/`===` separator (or space-delimited rule) of a
+#' `knitr::kable` into per-column `c(start, end)` display-width spans, used by
+#' [kable_to_grid()] to slice each data line.
+#'
+#' @param line The kable separator line.
+#' @param sep The column separator character (`"|"` for pipe, `" "` for simple).
+#' @return A list of length-2 `c(start, end)` spans, or `NULL` if none found.
+#' @noRd
 column_start_end_points <-  function (line, sep = " ") {
     line_width <- str_width(line)
     sep_p <- which(strsplit(line, "")[[1]] == sep)
@@ -140,6 +201,15 @@ column_start_end_points <-  function (line, sep = " ") {
                function(i) start_end_points[2 * i - 1:0])
 }
 
+#' Append pandoc continuation backslashes
+#'
+#' Ensure each wrapped content line ends with an escaping backslash so pandoc
+#' treats the following line as a continuation, accounting for trailing
+#' backslashes already present.
+#'
+#' @param x A character vector of content lines.
+#' @return The lines with continuation backslashes appended where needed.
+#' @noRd
 pandoc_wrap <- function(x) {
     nms <- names(x)
     names(x) <- NULL
@@ -151,6 +221,16 @@ pandoc_wrap <- function(x) {
     x
 }
 
+#' Validate and expand per-column alignment
+#'
+#' Resolve the `align` argument to a length-`ncol` vector of `l`/`r`/`c`:
+#' default from column type (`l` for character, `r` for numeric), recycle a
+#' single code, or split a string like `"lcr"`.
+#'
+#' @param data The (column) data the alignment applies to.
+#' @param align `NULL`, a single code, or a per-column string/vector.
+#' @return A character vector of alignment codes, one per column.
+#' @noRd
 valid_align <- function(data, align = NULL) {
     if (is.null(align)) {
         align <-
@@ -173,6 +253,16 @@ valid_align <- function(data, align = NULL) {
     align
 }
 
+#' Validate a merged-cell region
+#'
+#' Normalise `rows`/`cols` to `c(min, max)` spans, require contiguity when more
+#' than two indices are given, check they fall inside the table, and forbid a
+#' region straddling the header separator.
+#'
+#' @param rows,cols Numeric row/column indices of the region.
+#' @param gridtable The `GridTable` the region belongs to.
+#' @return A list with normalised `rows` and `cols` spans.
+#' @noRd
 valid_merged_cell <- function(rows, cols, gridtable) {
     stopifnot(is.numeric(rows) && is.numeric(cols))
     stopifnot(inherits(gridtable, "GridTable"))
