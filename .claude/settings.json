@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.R|*.r) Rscript -e 'a <- commandArgs(TRUE); invisible(parse(a)); print(lintr::lint(a))' \"$f\" 2>&1 || true ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
