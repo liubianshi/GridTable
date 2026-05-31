@@ -4,7 +4,7 @@
       print(GridTable(df))
     Output
       +-------+--------+
-      | name  | score  |
+      | name  |  score |
       +:======+=======:+
       | Alice | 91.500 |
       +-------+--------+
@@ -30,9 +30,9 @@
       print(GridTable(df, align = "lr"))
     Output
       +------+--------+
-      | a    | b      |
+      | a    |      b |
       +:=====+=======:+
-      | 中文 | 1.500  |
+      | 中文 |  1.500 |
       +------+--------+
       | x    | 22.000 |
       +------+--------+
@@ -41,14 +41,12 @@
 
     Code
       print(gt)
-    Message
-      Message: Adjusted table height attribute due to multiline content
     Output
       +------------+--------------+
-      | Location   | Temp         |
-      |            | Temp         |
+      | Location   |         Temp |
+      |            |         Temp |
       +------------+-------+------+
-      | city       | min   | max  |
+      | city       |   min |  max |
       +:===========+======:+=====:+
       | Antarctica | -89.2 | 19.8 |
       +------------+-------+------+
@@ -62,8 +60,8 @@
       | a | b |
       +:==+==:+
       | x | 1 |
-      | y +---+
-      |   | 2 |
+      +   +---+
+      | y | 2 |
       +---+---+
       | z | 3 |
       +---+---+
@@ -72,16 +70,15 @@
 
     Code
       print(gt)
-    Message
-      Message: Adjusted table height attribute due to multiline content
     Output
       +-----+-----+----+
       | H1  | H2  | H3 |
       +:====+:====+:===+
       | BIG       | x  |
       | BIG       |    |
-      | BIG       +----+
+      +           +----+
       | BIG       | y  |
+      | BIG       |    |
       +-----------+----+
 
 # merged region keeping only the anchor (drop_content)
@@ -92,8 +89,8 @@
       +----+----+
       | H1 | H2 |
       +:===+:===+
-      | 1  | B  |
-      |    +----+
+      | A  | B  |
+      +    +----+
       |    | D  |
       +----+----+
 

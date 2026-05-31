@@ -5,35 +5,28 @@
 \alias{print.GridTable}
 \title{Render and Print a Grid Table}
 \usage{
-\method{toString}{GridTable}(x, ...)
+\method{toString}{GridTable}(x, drop_empty_line = TRUE, ...)
 
 \method{print}{GridTable}(x, drop_empty_line = TRUE, ...)
 }
 \arguments{
 \item{x}{A \code{GridTable} object.}
 
-\item{...}{Passed through to \code{\link[=toString.Table]{toString.Table()}}.}
-
 \item{drop_empty_line}{When \code{TRUE} (default), drop rendered lines that carry
 no visible content.}
+
+\item{...}{Unused, for S3 signature compatibility.}
 }
 \value{
 \code{toString.GridTable()} returns a character vector with class
 \code{GridTable_output}. \code{print.GridTable()} returns it invisibly after printing.
 }
 \description{
-\code{toString.GridTable()} renders a \link{GridTable} object to a character vector of
-grid-table lines; \code{print.GridTable()} renders and \code{cat}s it to the console.
-Both drive the build/merge pipeline (\code{get_cells_from()} →
-\code{merge_cell_list()} → \code{\link[=toString.Table]{toString.Table()}}) and prepend any \code{caption}
-attribute.
-}
-\details{
-Rendering runs an \strong{auto-fit retry loop}: while building cells the engine may
-discover that content is too tall or too wide, grow the table's \code{height}/
-\code{width} attribute in place, and signal this by \code{stop()}ing with "Adjust the
-...". \code{toString.GridTable()} catches that condition and re-invokes itself
-until everything fits. Exceptions are used as control flow here by design.
+\code{toString.GridTable()} renders a \link{GridTable} to a character vector of
+grid-table lines; \code{print.GridTable()} renders and \code{cat}s it. Both run the
+occupancy-map engine: \code{\link[=grid_inputs]{grid_inputs()}} folds the render state into a sized
+occupancy map, \code{\link[=occupancy_render]{occupancy_render()}} draws it, and any \code{caption} attribute is
+prepended. All sizing is computed up front — there is no resize retry loop.
 }
 \examples{
 tbl <- GridTable(data.frame(a = c("中文", "x"), b = c(1.5, 22)))
