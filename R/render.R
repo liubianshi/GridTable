@@ -29,7 +29,7 @@ pad <- function(text, width, alignment) {
     left  <- switch(alignment, l = 1L, r = gap - 1L, c = gap %/% 2L,
                     stop("Align invalid", call. = FALSE))
     left  <- max(left, 1L)
-    right <- max(width - str_width(text) - left, 0L)
+    right <- max(gap - left, 0L)
     paste0(strrep(" ", left), text, strrep(" ", right))
 }
 
@@ -46,14 +46,14 @@ pad <- function(text, width, alignment) {
 #' @param occ Occupancy map.
 #' @param gap The gap index (0..nrow).
 #' @param field,align Column field widths and alignment codes.
-#' @param header Gap index carrying the header `=` rule (0 = none).
-#' @param footer Integer vector of gap indices carrying a footer `=` rule.
+#' @param rule_gaps Integer vector of gap indices carrying a `=` rule (the header
+#'   and footer separators, unified — both render identically).
 #' @return One rendered line (string).
 #' @noRd
-border_line <- function(occ, gap, field, align, header, footer) {
+border_line <- function(occ, gap, field, align, rule_gaps) {
     n_cols <- occ$ncol
     n_rows <- occ$nrow
-    rule   <- (header >= 1L && gap == header) || gap %in% footer
+    rule   <- gap %in% rule_gaps
     fill   <- if (rule) SYMBOL$HEADER else SYMBOL$LINE
     above  <- gap
     below  <- gap + 1L
@@ -142,23 +142,23 @@ content_line <- function(occ, content, row, offset, field, align, height,
 #' @param occ Occupancy map.
 #' @param content Prepared cell-text matrix.
 #' @param field,height,align Column widths, row heights, alignment codes.
-#' @param header,footer Header/footer rule gap indices.
+#' @param rule_gaps Integer vector of gap indices carrying a `=` rule.
 #' @param middle Logical matrix of vertically-centred anchors.
 #' @param drop_empty_line Drop all-blank content lines when `TRUE`.
 #' @return A character vector of rendered lines.
 #' @noRd
 occupancy_render <- function(occ, content, field, height, align,
-                             header, footer, middle, drop_empty_line = TRUE) {
+                             rule_gaps, middle, drop_empty_line = TRUE) {
     col_x   <- c(0L, cumsum(field + 1L))
     row_top <- c(1L, 1L + cumsum(height)[seq_len(occ$nrow - 1L)])
 
-    rendered <- border_line(occ, 0L, field, align, header, footer)
+    rendered <- border_line(occ, 0L, field, align, rule_gaps)
     for (row in seq_len(occ$nrow)) {
         for (offset in seq_len(height[row])) {
             rendered <- c(rendered, content_line(occ, content, row, offset, field,
                                                  align, height, col_x, row_top, middle))
         }
-        rendered <- c(rendered, border_line(occ, row, field, align, header, footer))
+        rendered <- c(rendered, border_line(occ, row, field, align, rule_gaps))
     }
     if (isTRUE(drop_empty_line)) {
         rendered <- rendered[grepl("[^|[:space:]]", rendered)]
@@ -172,8 +172,8 @@ occupancy_render <- function(occ, content, field, height, align,
 #' render state off a `GridTable` and reshape them for `occupancy_render()`:
 #' build the merge rectangles, fold each merged region's content into its anchor
 #' (joining members unless `drop_content`, dropping blank/`&nbsp;` lines, adding
-#' pandoc continuation `\` when `wrap`), and map the header/footer row indices to
-#' rule gaps.
+#' pandoc continuation `\` when `wrap`), and collect the header and footer row
+#' indices into one set of `=` rule gaps.
 #'
 #' @param gtable A `GridTable`.
 #' @return A named list of arguments for `occupancy_render()`.
@@ -189,15 +189,22 @@ grid_inputs <- function(gtable) {
 
     align  <- attr(gtable, "align")
     names(align) <- NULL
-    header <- as.integer(attr(gtable, "header"))
 
+    # Header and footer both render as a `=` rule with alignment colons, so they
+    # collapse to one set of gap indices. The header rule sits at gap `header`; a
+    # footer at row N draws a rule above row N (gap N-1) and along the bottom edge
+    # (gap n_rows).
+    header     <- as.integer(attr(gtable, "header"))
     ftr        <- attr(gtable, "footer")
     ftr        <- ftr[is.finite(ftr) & ftr >= 1L & ftr <= n_rows]
-    footer     <- if (length(ftr)) as.integer(unique(c(ftr - 1L, n_rows))) else integer(0)
+    rule_gaps  <- as.integer(unique(c(
+        if (header >= 1L) header,
+        if (length(ftr)) c(ftr - 1L, n_rows)
+    )))
 
     merges <- list()
     middle <- matrix(FALSE, n_rows, n_cols)
-    wrap_anchor <- list()
+    wrap   <- matrix(FALSE, n_rows, n_cols)
     for (m in attr(gtable, "merged_cells")) {
         r1 <- m$rows[1]; r2 <- m$rows[2]
         c1 <- m$cols[1]; c2 <- m$cols[2]
@@ -212,15 +219,13 @@ grid_inputs <- function(gtable) {
         content[r1, c1] <- cell_text       # ... then write the folded text to the anchor
 
         if (isTRUE(m$middle)) middle[r1, c1] <- TRUE
-        if (isTRUE(m$wrap))   wrap_anchor[[length(wrap_anchor) + 1L]] <- c(r1, c1)
+        if (isTRUE(m$wrap))   wrap[r1, c1]   <- TRUE
     }
 
-    occ <- build_occupancy(n_rows, n_cols, merges)
+    occ     <- build_occupancy(n_rows, n_cols, merges)
+    anchors <- occ_anchor_cells(occ)
 
-    is_wrap <- function(r, c) {
-        any(vapply(wrap_anchor, \(a) a[1] == r && a[2] == c, logical(1)))
-    }
-    for (cell in occ_anchor_cells(occ)) {
+    for (cell in anchors) {
         r <- cell[1]; c <- cell[2]
         lines <- strsplit(content[r, c], "\n", fixed = TRUE)[[1]]
         lines <- lines[!grepl("^\\s*(&nbsp;)?\\s*$", lines, perl = TRUE)]
@@ -228,20 +233,17 @@ grid_inputs <- function(gtable) {
             content[r, c] <- ""
             next
         }
-        if (length(wrap_anchor) && is_wrap(r, c) && length(lines) > 1L) {
+        if (wrap[r, c] && length(lines) > 1L) {
             lines[-length(lines)] <- pandoc_wrap(lines[-length(lines)])
         }
         content[r, c] <- paste(lines, collapse = "\n")
     }
 
-    field_min  <- attr(gtable, "width") + 2L
-    height_min <- attr(gtable, "height")
-
-    field  <- compute_field(occ, content, field_min)
-    height <- compute_height(occ, content, height_min)
+    field  <- compute_field(occ, content, attr(gtable, "width") + 2L, anchors)
+    height <- compute_height(occ, content, attr(gtable, "height"), anchors)
 
     list(occ = occ, content = content, field = field, height = height,
-         align = align, header = header, footer = footer, middle = middle)
+         align = align, rule_gaps = rule_gaps, middle = middle)
 }
 
 #' Render and Print a Grid Table
@@ -270,7 +272,7 @@ grid_inputs <- function(gtable) {
 toString.GridTable <- function(x, drop_empty_line = TRUE, ...) {
     args    <- grid_inputs(x)
     content <- occupancy_render(args$occ, args$content, args$field, args$height,
-                                args$align, args$header, args$footer, args$middle,
+                                args$align, args$rule_gaps, args$middle,
                                 drop_empty_line = drop_empty_line)
     if (!is.null(attr(x, "caption"))) {
         content <- c(attr(x, "caption"), "", content)

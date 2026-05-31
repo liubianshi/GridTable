@@ -135,71 +135,90 @@ grow_to_fit <- function(sizes, tracks, needed, absorbed_borders) {
     sizes
 }
 
+#' One forward-pass size computation along an axis
+#'
+#' The shared core of `compute_field` (columns) and `compute_height` (rows): both
+#' are the same forward pass, differing only in the axis accessors. Single-track
+#' cells set their track directly to fit their content; spanning cells are then
+#' processed narrowest-span-first and `grow_to_fit` enlarges their tracks only
+#' when the content does not already fit (so already-settled narrow spans are
+#' preserved).
+#'
+#' @param anchors A list of `c(row, col)` anchor positions.
+#' @param base The per-track floor (already includes any minimum).
+#' @param track A function `cell -> track index` for this axis (col or row).
+#' @param last A function `cell -> last track` the cell spans on this axis.
+#' @param measure A function `cell -> size its content needs`.
+#' @param absorbed A function `span_len -> internal borders usable as space`
+#'   (the colspan's internal `|` columns are usable; a rowspan's internal `-`
+#'   rows are not — they are always drawn, so it must return 0).
+#' @return The settled integer size vector.
+#' @noRd
+compute_axis <- function(anchors, base, track, last, measure, absorbed) {
+    sizes <- base
+    for (cell in anchors) {
+        if (last(cell) == track(cell)) {
+            t <- track(cell)
+            sizes[t] <- max(sizes[t], measure(cell))
+        }
+    }
+    spanning <- Filter(\(cell) last(cell) > track(cell), anchors)
+    spanning <- spanning[order(vapply(spanning,
+        \(cell) last(cell) - track(cell), numeric(1)))]
+    for (cell in spanning) {
+        t <- track(cell); lt <- last(cell)
+        sizes <- grow_to_fit(sizes, t:lt, measure(cell), absorbed(lt - t))
+    }
+    sizes
+}
+
 #' Forward-pass column widths
 #'
 #' `field[c]` is the number of characters between a column's two `|` borders
-#' (cell text plus its two padding spaces). Single-column cells set their column
-#' directly; multi-column (colspan) cells are processed narrowest-span-first and
-#' only widen their tracks when their content does not already fit. `field_min`
-#' is a per-column floor (e.g. a width the user pinned via `set_attr`).
+#' (cell text plus its two padding spaces). A colspan's internal `|` columns are
+#' usable content space, so spanning cells absorb them (`absorbed = span`).
+#' `field_min` is a per-column floor (e.g. a width the user pinned via
+#' `set_attr`).
 #'
 #' @param occ An occupancy map.
 #' @param content A character matrix of cell text.
 #' @param field_min Integer per-column minimum field width.
+#' @param anchors Pre-computed anchor list (defaults to `occ_anchor_cells(occ)`).
 #' @return An integer vector of column field widths.
 #' @noRd
-compute_field <- function(occ, content, field_min) {
-    field <- pmax(3L, as.integer(field_min))
-    anchors <- occ_anchor_cells(occ)
-    for (cell in anchors) {
-        row <- cell[1]; col <- cell[2]
-        if (occ$last_col[row, col] == col) {
-            field[col] <- max(field[col], cell_width(content, row, col) + 2L)
-        }
-    }
-    spanning <- Filter(\(cell) occ$last_col[cell[1], cell[2]] > cell[2], anchors)
-    spanning <- spanning[order(vapply(
-        spanning, \(cell) occ$last_col[cell[1], cell[2]] - cell[2], numeric(1)))]
-    for (cell in spanning) {
-        row <- cell[1]; col <- cell[2]; lc <- occ$last_col[row, col]
-        field <- grow_to_fit(field, col:lc, cell_width(content, row, col) + 2L, lc - col)
-    }
-    field
+compute_field <- function(occ, content, field_min, anchors = occ_anchor_cells(occ)) {
+    compute_axis(
+        anchors,
+        base     = pmax(3L, as.integer(field_min)),
+        track    = \(cell) cell[2],
+        last     = \(cell) occ$last_col[cell[1], cell[2]],
+        measure  = \(cell) cell_width(content, cell[1], cell[2]) + 2L,
+        absorbed = \(span) span
+    )
 }
 
 #' Forward-pass row heights
 #'
-#' The width algorithm transposed: `height[r]` is the number of text lines in
-#' row `r`. Single-row cells set their row from their line count; multi-row
-#' (rowspan) cells are processed shortest-span-first and only grow their tracks
-#' when their content does not already fit. `height_min` is a per-row floor.
-#'
-#' Unlike column widths, a rowspan's *internal* horizontal borders are NOT
-#' usable space: the renderer always draws them as a (blank-in-this-column)
-#' rule and only places text on each row's own lines. So `grow_to_fit` is called
-#' with `absorbed_borders = 0` here — counting them (as the reference renderer
-#' did) over-estimates the room and silently drops the cell's last line(s).
+#' `height[r]` is the number of text lines in row `r`. Unlike column widths, a
+#' rowspan's *internal* horizontal borders are NOT usable space: the renderer
+#' always draws them as a (blank-in-this-column) rule and only places text on
+#' each row's own lines. So spanning cells absorb 0 internal borders — counting
+#' them (as the reference renderer did) over-estimates the room and silently
+#' drops the cell's last line(s). `height_min` is a per-row floor.
 #'
 #' @param occ An occupancy map.
 #' @param content A character matrix of cell text.
 #' @param height_min Integer per-row minimum height.
+#' @param anchors Pre-computed anchor list (defaults to `occ_anchor_cells(occ)`).
 #' @return An integer vector of row heights.
 #' @noRd
-compute_height <- function(occ, content, height_min) {
-    height <- pmax(1L, as.integer(height_min))
-    anchors <- occ_anchor_cells(occ)
-    for (cell in anchors) {
-        row <- cell[1]; col <- cell[2]
-        if (occ$last_row[row, col] == row) {
-            height[row] <- max(height[row], length(cell_lines(content, row, col)))
-        }
-    }
-    spanning <- Filter(\(cell) occ$last_row[cell[1], cell[2]] > cell[1], anchors)
-    spanning <- spanning[order(vapply(
-        spanning, \(cell) occ$last_row[cell[1], cell[2]] - cell[1], numeric(1)))]
-    for (cell in spanning) {
-        row <- cell[1]; col <- cell[2]; lr <- occ$last_row[row, col]
-        height <- grow_to_fit(height, row:lr, length(cell_lines(content, row, col)), 0L)
-    }
-    height
+compute_height <- function(occ, content, height_min, anchors = occ_anchor_cells(occ)) {
+    compute_axis(
+        anchors,
+        base     = pmax(1L, as.integer(height_min)),
+        track    = \(cell) cell[1],
+        last     = \(cell) occ$last_row[cell[1], cell[2]],
+        measure  = \(cell) length(cell_lines(content, cell[1], cell[2])),
+        absorbed = \(span) 0L
+    )
 }

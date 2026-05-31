@@ -15,30 +15,30 @@ test_that("pad honours alignment and keeps >=1 leading space", {
 test_that("border_line draws a header '=' rule with alignment colons", {
   occ  <- build_occupancy(2, 2, list())
   line <- border_line(occ, gap = 1, field = c(3L, 3L), align = c("l", "r"),
-                      header = 1L, footer = integer(0))
+                      rule_gaps = 1L)
   expect_equal(line, "+:==+==:+")
 })
 
 test_that("border_line draws a plain '-' rule away from header/footer", {
   occ  <- build_occupancy(2, 2, list())
   line <- border_line(occ, gap = 0, field = c(3L, 3L), align = c("l", "l"),
-                      header = 1L, footer = integer(0))
+                      rule_gaps = 1L)
   expect_equal(line, "+---+---+")
 })
 
 test_that("border_line: a rowspan crosses the rule as blank, not a '-' run", {
   occ  <- build_occupancy(2, 1, list(c(1, 1, 2, 1)))   # col1 spans rows 1-2
   line <- border_line(occ, gap = 1, field = 5L, align = "l",
-                      header = 0L, footer = integer(0))
+                      rule_gaps = integer(0))
   expect_equal(line, "+     +")    # no horizontal rule where the cell continues
 })
 
-test_that("grid_inputs maps a footer index to its rule gaps", {
+test_that("grid_inputs maps header and footer indices to unified rule gaps", {
   gt   <- GridTable(data.frame(a = c("x", "y", "s"), b = c(1, 2, 3)), footer = 3)
   args <- grid_inputs(gt)
-  # footer = N draws a rule above row N (gap N-1) and along the table bottom.
-  expect_setequal(args$footer, c(2L, nrow(gt)))
-  expect_equal(args$header, 1L)
+  # header = 1 -> gap 1; footer = N draws a rule above row N (gap N-1) and along
+  # the table bottom (gap nrow). All fold into a single rule_gaps set.
+  expect_setequal(args$rule_gaps, c(1L, 2L, nrow(gt)))
 })
 
 test_that("grid_inputs folds drop_content to the anchor's own cell", {
