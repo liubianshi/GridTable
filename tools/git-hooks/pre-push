@@ -1,0 +1,48 @@
+#!/usr/bin/env sh
+# pre-push: enforce "bump the version before pushing".
+#
+# For every ref being pushed, compare the Version field in DESCRIPTION between
+# the local tip and what is currently on the remote. If the push carries real
+# changes to tracked files but the Version is unchanged, the push is blocked.
+#
+# Escape hatch (git's standard): git push --no-verify
+#
+# This hook lives in a tracked directory and is wired up via
+#   git config core.hooksPath tools/git-hooks
+# so every clone must run that once (see tools/git-hooks/README.md).
+
+desc="DESCRIPTION"
+
+# Read the Version field from DESCRIPTION at a given commit/ref.
+read_version() {
+    git show "$1:$desc" 2>/dev/null \
+        | sed -n 's/^Version:[[:space:]]*//p' | head -n1
+}
+
+status=0
+
+# git feeds one line per ref on stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Branch deletion: local_sha is all zeros -> nothing to check.
+    case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+    # New branch on the remote: no remote tip to diff against -> allow.
+    case "$remote_sha" in *[!0]*) ;; *) continue ;; esac
+
+    local_ver="$(read_version "$local_sha")"
+    [ -z "$local_ver" ] && continue          # no DESCRIPTION here -> not an R-package push
+
+    # No tracked-file changes between remote and local tip -> nothing to gate.
+    if git diff --quiet "$remote_sha" "$local_sha" -- 2>/dev/null; then
+        continue
+    fi
+
+    remote_ver="$(read_version "$remote_sha")"
+    if [ "$local_ver" = "$remote_ver" ]; then
+        printf '✗ pre-push 拦截:%s 含新改动,但 DESCRIPTION Version 仍为 %s(与远端相同)。\n' \
+            "$local_ref" "$local_ver" >&2
+        printf '  请先更新版本号再 push;确需跳过用:git push --no-verify\n' >&2
+        status=1
+    fi
+done
+
+exit $status
