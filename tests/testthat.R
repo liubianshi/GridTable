@@ -1,4 +1,4 @@
 library(testthat)
-library(gridtable)
+library(GridTable)
 
-test_check("gridtable")
+test_check("GridTable")
