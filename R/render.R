@@ -248,8 +248,8 @@ grid_inputs <- function(gtable) {
 #'
 #' `toString.GridTable()` renders a [GridTable] to a character vector of
 #' grid-table lines; `print.GridTable()` renders and `cat`s it. Both run the
-#' occupancy-map engine: [grid_inputs()] folds the render state into a sized
-#' occupancy map, [occupancy_render()] draws it, and any `caption` attribute is
+#' occupancy-map engine: `grid_inputs()` folds the render state into a sized
+#' occupancy map, `occupancy_render()` draws it, and any `caption` attribute is
 #' prepended. All sizing is computed up front — there is no resize retry loop.
 #'
 #' @param x A `GridTable` object.

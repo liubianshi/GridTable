@@ -24,8 +24,8 @@ no visible content.}
 \description{
 \code{toString.GridTable()} renders a \link{GridTable} to a character vector of
 grid-table lines; \code{print.GridTable()} renders and \code{cat}s it. Both run the
-occupancy-map engine: \code{\link[=grid_inputs]{grid_inputs()}} folds the render state into a sized
-occupancy map, \code{\link[=occupancy_render]{occupancy_render()}} draws it, and any \code{caption} attribute is
+occupancy-map engine: \code{grid_inputs()} folds the render state into a sized
+occupancy map, \code{occupancy_render()} draws it, and any \code{caption} attribute is
 prepended. All sizing is computed up front — there is no resize retry loop.
 }
 \examples{
