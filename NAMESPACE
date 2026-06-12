@@ -3,6 +3,7 @@
 S3method(print,GridTable)
 S3method(toString,GridTable)
 export(GridTable)
+export(add_footnote)
 export(kable_to_grid)
 export(merge_cells)
 export(set_attr)

@@ -25,8 +25,11 @@ no visible content.}
 \code{toString.GridTable()} renders a \link{GridTable} to a character vector of
 grid-table lines; \code{print.GridTable()} renders and \code{cat}s it. Both run the
 occupancy-map engine: \code{grid_inputs()} folds the render state into a sized
-occupancy map, \code{occupancy_render()} draws it, and any \code{caption} attribute is
-prepended. All sizing is computed up front — there is no resize retry loop.
+occupancy map and \code{occupancy_render()} draws it. Any \code{caption} attribute is
+prepended and any \code{notes} (see \code{\link[=add_footnote]{add_footnote()}}) are appended below the
+table, wrapped in a \verb{::: \{custom-style="..."\}} div when the \code{note_style}
+attribute is set. All sizing is computed up front — there is no resize
+retry loop.
 }
 \examples{
 tbl <- GridTable(data.frame(a = c("中文", "x"), b = c(1.5, 22)))

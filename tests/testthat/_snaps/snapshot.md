@@ -176,3 +176,39 @@
       | y    | 2 |
       +------+---+
 
+# footnotes: cell markers + notes block below the table
+
+    Code
+      print(tbl)
+    Output
+      Table: footnotes
+      
+      +------+--------+
+      | term | est^a^ |
+      +:=====+=======:+
+      | x1   |  1.340 |
+      +------+--------+
+      | x2   |  2.100 |
+      +------+--------+
+      
+      ^a^ Standard errors clustered at the province level.
+      
+      Source: simulated data.
+
+# footnotes: notes block wrapped in a custom-style div
+
+    Code
+      print(tbl)
+    Output
+      +------+---+
+      | a^*^ | b |
+      +:=====+==:+
+      | x    | 1 |
+      +------+---+
+      | y    | 2 |
+      +------+---+
+      
+      ::: {custom-style="Table Note"}
+      ^*^ Pandoc applies the style in docx/odt/ICML output.
+      :::
+

@@ -56,3 +56,21 @@ test_that("kable_to_grid reverse-parses a pipe kable", {
   )
   expect_snapshot(print(kable_to_grid(kbl)))
 })
+
+test_that("add_footnote stores notes and marks the selected cells", {
+  gt <- GridTable(data.frame(a = c("x", "y"), b = c(1, 2)))
+  add_footnote(gt, "Clustered at the province level.", ref = "a", i = 1, j = 2)
+  expect_equal(attr(gt, "notes"), "^a^ Clustered at the province level.")
+  expect_equal(gt[[2]][1], "b^a^")             # header cell got the marker
+
+  add_footnote(gt, "Source: census.")          # no ref -> bare note, no marker
+  expect_equal(attr(gt, "notes")[2], "Source: census.")
+})
+
+test_that("add_footnote validates its inputs", {
+  gt <- GridTable(data.frame(a = "x"))
+  expect_error(add_footnote(gt, c("a", "b")), "single character")
+  expect_error(add_footnote(gt, "n", i = 1), "both i and j")
+  expect_error(add_footnote(gt, "n", i = 1, j = 1), "ref")
+  expect_error(add_footnote(gt, "n", ref = "a", i = 99, j = 1))
+})
