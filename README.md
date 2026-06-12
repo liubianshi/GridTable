@@ -11,9 +11,9 @@ understands as a real table.
 The layout engine is **CJK-width aware** (it measures text with
 `nchar(type = "width")`), so tables mixing Chinese / wide and narrow characters
 stay aligned. It supports merged cells (colspan, rowspan, and both at once),
-header / footer separator lines, per-column alignment, content wrapping,
-vertical centring, and automatic column-width / row-height growth so content
-always fits.
+header / footer separator lines, footnotes with cell markers, per-column
+alignment, content wrapping, vertical centring, and automatic column-width /
+row-height growth so content always fits.
 
 ## Installation
 
@@ -92,6 +92,61 @@ print(GridTable(sales, footer = 3))
 +--------+--------+
 | Total  |    215 |
 +:=======+=======:+
+```
+
+### Footnotes
+
+A `footer` is a structural table foot, **not** a footnote. For actual table
+notes use `add_footnote()`: the note prints as a paragraph *below* the table
+(the mirror of `caption` above it), and an optional `ref` symbol marks cells as
+a pandoc superscript — no fake rows are inserted into the table.
+
+```r
+df  <- data.frame(term = c("x1", "x2"), est = c(1.34, 2.1))
+tbl <- GridTable(df)
+add_footnote(tbl, "Standard errors clustered at the province level.",
+             ref = "a", i = 1, j = 2)
+add_footnote(tbl, "Source: simulated data.")
+print(tbl)
+```
+
+```
++------+--------+
+| term | est^a^ |
++:=====+=======:+
+| x1   |  1.340 |
++------+--------+
+| x2   |  2.100 |
++------+--------+
+
+^a^ Standard errors clustered at the province level.
+
+Source: simulated data.
+```
+
+Set a `note_style` attribute (via `GridTable(...)` or `set_attr()`) to wrap the
+notes in a `::: {custom-style="..."}` fenced div — pandoc applies that paragraph
+style in docx/odt/ICML output (define the style in your reference doc):
+
+```r
+set_attr(tbl, note_style = "Table Note")
+print(tbl)
+```
+
+```
++------+--------+
+| term | est^a^ |
++:=====+=======:+
+| x1   |  1.340 |
++------+--------+
+| x2   |  2.100 |
++------+--------+
+
+::: {custom-style="Table Note"}
+^a^ Standard errors clustered at the province level.
+
+Source: simulated data.
+:::
 ```
 
 ### Merging cells
@@ -196,6 +251,7 @@ The public surface is small:
 | `GridTable()` | Build a table from a `data.frame` / `data.table` / `matrix`. |
 | `kable_to_grid()` | Build a table from a `knitr::kable`. |
 | `merge_cells()` | Register / cancel merged regions (`drop_content` / `middle` / `wrap`). |
+| `add_footnote()` | Register a footnote below the table, with optional cell markers. |
 | `set_attr()` | Pin or adjust widths, heights, alignment, captions. |
 | `print()` / `toString()` | Render the table. |
 
