@@ -16,16 +16,22 @@ columns, right for numeric), a single character such as \code{"l"}, \code{"r"} o
 \code{"c"} recycled to every column, or a string/vector of per-column codes such
 as \code{"lcr"}.}
 
-\item{header}{Row index of the header separator line (drawn with \code{=}). When
-\code{NULL} or \code{0}, the column names are prepended as the first row and the
-header is placed after them (\code{header = 1}).}
+\item{header}{Number of leading rows that form the table header: the header
+separator line (drawn with \code{=}) is placed below row \code{header}. When \code{NULL}
+or \code{0}, the column names are prepended as the first row and become the
+header (\code{header = 1}); user-facing row indices then start at 2 for the
+first data row.}
 
-\item{footer}{Row index after which the footer separator line is drawn.
-Defaults to \code{Inf} (no footer).}
+\item{footer}{Row index of the first table-foot row: a \code{=} separator line
+is drawn above that row, so the rows from \code{footer} to the bottom print as
+the table foot (pandoc's table foot, the analogue of HTML \verb{<tfoot>} --
+e.g. a totals row). This is \emph{not} a footnote mechanism. Defaults to \code{Inf}
+(no table foot).}
 
 \item{...}{Additional attributes stored on the returned object via
-\code{\link[data.table:setattr]{data.table::setattr()}}. The most useful is \code{caption}, a string rendered
-above the table.}
+\code{\link[data.table:setattr]{data.table::setattr()}}. The most useful are \code{caption}, a string rendered
+above the table, and \code{note_style}, a paragraph style name wrapping the
+footnote block (see \code{\link[=add_footnote]{add_footnote()}}).}
 }
 \value{
 An object of class \code{GridTable} (a \code{data.table} with render-state

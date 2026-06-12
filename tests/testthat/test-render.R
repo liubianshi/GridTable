@@ -71,3 +71,22 @@ test_that("grid_inputs drops blank / &nbsp; lines from a cell", {
   args <- grid_inputs(gt)
   expect_equal(args$content[2, 1], "one\ntwo")
 })
+
+test_that("toString appends notes below the table, one paragraph each", {
+  gt <- GridTable(data.frame(a = "x"))
+  add_footnote(gt, "Note one.", ref = "a", i = 1, j = 1)
+  add_footnote(gt, "Note two.")
+  out <- toString(gt)
+  n   <- length(out)
+  expect_equal(unclass(out[(n - 3):n]),
+               c("", "^a^ Note one.", "", "Note two."))
+})
+
+test_that("toString wraps the notes block in a custom-style div when set", {
+  gt <- GridTable(data.frame(a = "x"))
+  add_footnote(gt, "Note one.")
+  set_attr(gt, note_style = "Table Note")
+  out <- toString(gt)
+  expect_true(any(out == '::: {custom-style="Table Note"}'))
+  expect_equal(unclass(out[length(out)]), ":::")
+})

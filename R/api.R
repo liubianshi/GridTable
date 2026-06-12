@@ -14,14 +14,20 @@
 #'   columns, right for numeric), a single character such as `"l"`, `"r"` or
 #'   `"c"` recycled to every column, or a string/vector of per-column codes such
 #'   as `"lcr"`.
-#' @param header Row index of the header separator line (drawn with `=`). When
-#'   `NULL` or `0`, the column names are prepended as the first row and the
-#'   header is placed after them (`header = 1`).
-#' @param footer Row index after which the footer separator line is drawn.
-#'   Defaults to `Inf` (no footer).
+#' @param header Number of leading rows that form the table header: the header
+#'   separator line (drawn with `=`) is placed below row `header`. When `NULL`
+#'   or `0`, the column names are prepended as the first row and become the
+#'   header (`header = 1`); user-facing row indices then start at 2 for the
+#'   first data row.
+#' @param footer Row index of the first table-foot row: a `=` separator line
+#'   is drawn above that row, so the rows from `footer` to the bottom print as
+#'   the table foot (pandoc's table foot, the analogue of HTML `<tfoot>` --
+#'   e.g. a totals row). This is *not* a footnote mechanism. Defaults to `Inf`
+#'   (no table foot).
 #' @param ... Additional attributes stored on the returned object via
-#'   [data.table::setattr()]. The most useful is `caption`, a string rendered
-#'   above the table.
+#'   [data.table::setattr()]. The most useful are `caption`, a string rendered
+#'   above the table, and `note_style`, a paragraph style name wrapping the
+#'   footnote block (see [add_footnote()]).
 #'
 #' @return An object of class `GridTable` (a `data.table` with render-state
 #'   attributes). Use [print.GridTable()] or [toString.GridTable()] to render
@@ -218,6 +224,92 @@ merge_cells <- function(tbl, i = NULL, j = NULL, cancel = NULL, ...) {
     names(newattrs) <- c(old_merged_cell_names, merged_cell_name)
     data.table::setattr(tbl, "merged_cells", newattrs)
     return(invisible(tbl))
+}
+
+#' Add a Footnote Below a Grid Table
+#'
+#' Register a footnote on a `GridTable`. Footnotes are stored in the `notes`
+#' attribute and rendered by [toString.GridTable()] as paragraphs *below* the
+#' table block, mirroring how `caption` is placed above it -- the table
+#' geometry itself is untouched (no extra rows are inserted). When `ref` is
+#' given, the note is prefixed with the pandoc superscript marker `^ref^` and
+#' the cells selected by `i`/`j` get the same marker appended to their content
+#' (column widths grow automatically at render time). Modifies `tbl` by
+#' reference and returns it invisibly.
+#'
+#' @details
+#' When the table carries a `note_style` attribute (set it with
+#' `GridTable(..., note_style = "Table Note")` or
+#' `set_attr(tbl, note_style = "Table Note")`), the rendered notes are wrapped
+#' in a pandoc fenced div `::: {custom-style="..."}`. Pandoc applies custom
+#' styles in docx, odt and ICML output (the style must exist in the reference
+#' document); other writers ignore the attribute and the notes degrade to
+#' plain paragraphs. Without `note_style` the notes are emitted as bare
+#' paragraphs, keeping terminal output free of fence noise.
+#'
+#' Cell markers are baked into the cell text at call time, while the note
+#' itself lives in the `notes` attribute: clearing that attribute afterwards
+#' (e.g. `set_attr(tbl, notes = NULL)`) does not remove markers already
+#' placed in cells.
+#'
+#' @param tbl A `GridTable` object.
+#' @param note Character string: the footnote text. The reference marker is
+#'   added automatically from `ref`; do not include it here.
+#' @param ref Optional character string: a reference symbol such as `"a"` or
+#'   `"*"`, rendered as a pandoc superscript `^ref^`.
+#' @param i,j Optional integer vectors selecting the cells to mark with the
+#'   `^ref^` marker (every combination of `i` rows and `j` columns). Must be
+#'   supplied together, and require `ref`. Row indices follow the user-facing
+#'   convention: when the column names were prepended (`header = NULL`), row 1
+#'   is the header row.
+#'
+#' @return The (invisibly returned) `GridTable`, modified by reference.
+#'
+#' @examples
+#' df  <- data.frame(term = c("x1", "x2"), est = c(1.34, 2.1))
+#' tbl <- GridTable(df)
+#' add_footnote(tbl, "Standard errors in parentheses.", ref = "a", i = 1, j = 2)
+#' add_footnote(tbl, "Source: simulated data.")
+#' print(tbl)
+#'
+#' # Wrap the notes in a custom-style div for docx output
+#' set_attr(tbl, note_style = "Table Note")
+#' print(tbl)
+#'
+#' @seealso [GridTable()], [set_attr()]
+#' @export
+add_footnote <- function(tbl, note, ref = NULL, i = NULL, j = NULL) {
+    stopifnot(inherits(tbl, "GridTable"))
+    if (!is.character(note) || length(note) != 1L || is.na(note)) {
+        stop("`note` must be a single character string", call. = FALSE)
+    }
+    if (is.null(i) != is.null(j)) {
+        stop("Need to set both i and j", call. = FALSE)
+    }
+    marker <- NULL
+    if (!is.null(ref)) {
+        if (!is.character(ref) || length(ref) != 1L || is.na(ref) || !nzchar(ref)) {
+            stop("`ref` must be a single non-empty character string", call. = FALSE)
+        }
+        marker <- paste0("^", ref, "^")
+        note   <- paste0(marker, " ", note)
+    }
+    if (!is.null(i)) {
+        if (is.null(marker)) {
+            stop("`ref` is required when marking cells with i/j", call. = FALSE)
+        }
+        i <- as.integer(i)
+        j <- as.integer(j)
+        stopifnot(all(i >= 1L), all(i <= nrow(tbl)),
+                  all(j >= 1L), all(j <= ncol(tbl)))
+        for (r in i) {
+            for (col in j) {
+                data.table::set(tbl, r, col, paste0(tbl[[col]][r], marker))
+            }
+        }
+    }
+    data.table::setattr(tbl, "notes", c(attr(tbl, "notes"), note))
+    invisible(tbl)
 }
 
 #' Adjust Render-State Attributes of a Grid Table

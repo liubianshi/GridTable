@@ -251,8 +251,11 @@ grid_inputs <- function(gtable) {
 #' `toString.GridTable()` renders a [GridTable] to a character vector of
 #' grid-table lines; `print.GridTable()` renders and `cat`s it. Both run the
 #' occupancy-map engine: `grid_inputs()` folds the render state into a sized
-#' occupancy map, `occupancy_render()` draws it, and any `caption` attribute is
-#' prepended. All sizing is computed up front — there is no resize retry loop.
+#' occupancy map and `occupancy_render()` draws it. Any `caption` attribute is
+#' prepended and any `notes` (see [add_footnote()]) are appended below the
+#' table, wrapped in a `::: {custom-style="..."}` div when the `note_style`
+#' attribute is set. All sizing is computed up front — there is no resize
+#' retry loop.
 #'
 #' @param x A `GridTable` object.
 #' @param drop_empty_line When `TRUE` (default), drop rendered lines that carry
@@ -276,6 +279,17 @@ toString.GridTable <- function(x, drop_empty_line = TRUE, ...) {
                                 drop_empty_line = drop_empty_line)
     if (!is.null(attr(x, "caption"))) {
         content <- c(attr(x, "caption"), "", content)
+    }
+    notes <- attr(x, "notes")
+    if (length(notes)) {
+        # One paragraph per note: interleave blank lines, drop the trailing one.
+        block <- as.vector(rbind(notes, ""))
+        block <- block[-length(block)]
+        style <- attr(x, "note_style")
+        if (!is.null(style)) {
+            block <- c(sprintf('::: {custom-style="%s"}', style), block, ":::")
+        }
+        content <- c(content, "", block)
     }
     structure(content, class = "GridTable_output")
 }

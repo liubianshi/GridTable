@@ -97,3 +97,20 @@ test_that("set_attr width DSL widens one column", {
   set_attr(gt, "width", "1+3")
   expect_snapshot(print(gt))
 })
+
+test_that("footnotes: cell markers + notes block below the table", {
+  df  <- data.frame(term = c("x1", "x2"), est = c(1.34, 2.1))
+  tbl <- GridTable(df, caption = "Table: footnotes")
+  add_footnote(tbl, "Standard errors clustered at the province level.",
+               ref = "a", i = 1, j = 2)
+  add_footnote(tbl, "Source: simulated data.")
+  expect_snapshot(print(tbl))
+})
+
+test_that("footnotes: notes block wrapped in a custom-style div", {
+  tbl <- GridTable(data.frame(a = c("x", "y"), b = c(1, 2)))
+  add_footnote(tbl, "Pandoc applies the style in docx/odt/ICML output.",
+               ref = "*", i = 1, j = 1)
+  set_attr(tbl, note_style = "Table Note")
+  expect_snapshot(print(tbl))
+})
