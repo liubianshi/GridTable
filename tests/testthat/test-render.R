@@ -12,6 +12,57 @@ test_that("pad honours alignment and keeps >=1 leading space", {
   expect_equal(nchar(pad("xyz", 5, "r")), 5) # never overflows the field
 })
 
+test_that("padding in wide fields cannot introduce Markdown code indentation", {
+  for (alignment in c("l", "c", "r")) {
+    for (text in c("ab", "中文", "$x$")) {
+      out <- pad(text, 40L, alignment)
+      leading <- nchar(out) - nchar(sub("^ +", "", out))
+      expect_lte(leading, 3L)
+      expect_gte(leading, 1L)
+      expect_equal(str_width(out), 40L)
+      expect_identical(trimws(out), text)
+    }
+    expect_identical(pad("", 40L, alignment), strrep(" ", 40L))
+  }
+  # User-provided indentation remains part of the content.
+  expect_true(startsWith(pad("    code", 20L, "l"), "     code"))
+  expect_error(pad("x", 10L, "invalid"), "Align invalid")
+})
+
+test_that("Pandoc parses math in wide aligned and merged cells", {
+  pandoc <- Sys.which("pandoc")
+  skip_if(!nzchar(pandoc), "Pandoc is required for the parsing regression")
+  symbols <- c(
+    "$\\Delta \\mathit{Dep}$",
+    "$\\Delta \\mathit{Dep}^{\\mathrm{D}}$",
+    "$\\Delta \\mathit{Dep}^{\\mathrm{I}}$",
+    "$\\Delta \\mathit{IP}$",
+    "$\\Delta \\tau$"
+  )
+  input <- tempfile(fileext = ".md")
+  output <- tempfile(fileext = ".native")
+  on.exit(unlink(c(input, output)), add = TRUE)
+  for (alignment in c("c", "r")) {
+    for (merged in c(FALSE, TRUE)) {
+      tbl <- GridTable(data.frame(
+        symbol = symbols, label = rep("变化（百分点）", 5L), N = rep("100", 5L)
+      ), align = c(alignment, "l", "r"))
+      set_attr(tbl, "width", c(50L, 30L, 12L))
+      if (merged) merge_cells(tbl, i = 2L, j = 2:3, drop_content = TRUE)
+      writeLines(toString(tbl), input)
+      status <- system2(pandoc, c("-f", "markdown", "-t", "native",
+                                 "-o", shQuote(output), shQuote(input)))
+      expect_equal(status, 0L)
+      ast <- paste(readLines(output), collapse = " ")
+      expect_length(regmatches(ast, gregexpr("\\bMath\\s+InlineMath\\b", ast,
+                                             perl = TRUE))[[1L]], 5L)
+      expect_false(grepl("CodeBlock", ast, fixed = TRUE))
+      expect_true(grepl(if (alignment == "c") "AlignCenter" else "AlignRight", ast,
+                       fixed = TRUE))
+    }
+  }
+})
+
 test_that("border_line draws a header '=' rule with alignment colons", {
   occ  <- build_occupancy(2, 2, list())
   line <- border_line(occ, gap = 1, field = c(3L, 3L), align = c("l", "r"),

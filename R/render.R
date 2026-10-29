@@ -15,9 +15,10 @@
 #'
 #' Place `text` inside a `width`-character field with at least one space of
 #' padding on the left. `l` hugs the left, `r` the right, `c` centres (extra
-#' space to the right). Unlike the previous engine — whose body was always
-#' left-aligned — the per-column `align` now governs the body, not just the
-#' header rule's colons.
+#' space to the right), subject to a three-space cap on generated leading
+#' padding. Excess padding moves to the right so Pandoc does not interpret
+#' short content in wide cells as indented code. Header-rule colons retain
+#' the requested alignment in the rendered document; user text is unchanged.
 #'
 #' @param text The cell text for this line.
 #' @param width The field width (chars between the two `|`).
@@ -28,7 +29,7 @@ pad <- function(text, width, alignment) {
     gap   <- width - str_width(text)
     left  <- switch(alignment, l = 1L, r = gap - 1L, c = gap %/% 2L,
                     stop("Align invalid", call. = FALSE))
-    left  <- max(left, 1L)
+    left  <- min(max(left, 1L), MAX_LEADING_PAD)
     right <- max(gap - left, 0L)
     paste0(strrep(" ", left), text, strrep(" ", right))
 }

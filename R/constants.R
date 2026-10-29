@@ -5,6 +5,9 @@
 #   HEADER  "="  header separator line
 #   FOOTER  "="  footer separator line
 #   ALIGN   ":"  alignment marker placed on a header line (`:--`, `--:`, `:-:`)
+# Keep generated indentation below Markdown's four-space code-block threshold.
+MAX_LEADING_PAD <- 3L
+
 SYMBOL <- list(VERTICE = "+",
                SIDE    = "|",
                LINE    = "-",

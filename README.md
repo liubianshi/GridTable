@@ -57,6 +57,10 @@ Pass `align` as one code per column (`l`eft, `r`ight, `c`entre), or a single
 code recycled to all. Numeric columns default to right, character to left. The
 alignment governs the **body** text as well as the header rule's colons.
 
+Generated leading padding is capped at three spaces so Pandoc does not parse cell content as indented code.
+Extra padding moves to the right, preserving cell width.
+The header rule's colons still specify alignment in the rendered document.
+
 ```r
 df <- data.frame(item = c("apples", "pie"), qty = c(4, 12), note = c("fresh", "warm"))
 print(GridTable(df, align = "lcr"))
@@ -86,11 +90,11 @@ print(GridTable(sales, footer = 3))
 +--------+--------+
 | region | amount |
 +:=======+=======:+
-| North  |    120 |
+| North  |   120  |
 +:=======+=======:+
-| South  |     95 |
+| South  |   95   |
 +--------+--------+
-| Total  |    215 |
+| Total  |   215  |
 +:=======+=======:+
 ```
 
@@ -168,7 +172,7 @@ print(gt)
 
 ```
 +------------+--------------+
-| Location   |         Temp |
+| Location   |   Temp       |
 +------------+-------+------+
 | city       |   min |  max |
 +:===========+======:+=====:+
@@ -188,11 +192,11 @@ print(gt)
 +-------+-------+
 | group | value |
 +:======+======:+
-| A     |     1 |
+| A     |   1   |
 +       +-------+
-| A     |     2 |
+| A     |   2   |
 +-------+-------+
-| B     |     3 |
+| B     |   3   |
 +-------+-------+
 ```
 
@@ -238,7 +242,7 @@ print(GridTable(df, align = "lr"))
 +------+------+
 | 上海 | 2487 |
 +------+------+
-| x    |    5 |
+| x    |   5  |
 +------+------+
 ```
 

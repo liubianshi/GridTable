@@ -100,7 +100,7 @@ step. Read the pipeline in this order:
    where a horizontal border runs, and a space where a rowspan crosses
    uninterrupted. `content_line` walks a row left to right, grouping same-cell
    columns (a colspan) into one padded field; `pad` applies the per-column
-   alignment to the **body** text, and a `middle` anchor reserves leading blank
+   alignment subject to a three-space leading-padding cap, and a `middle` anchor reserves leading blank
    lines to centre vertically. `toString.GridTable` prepends any `caption`;
    `print.GridTable` `cat`s the result.
 
@@ -154,8 +154,11 @@ and rejects overlaps.
 - **`GridTable(header = NULL)` shifts user row indices.** It prepends the column
   names as row 1, so the first *data* row is row 2 — `merge_cells(i = 2:3, ...)`
   targets the first two data rows, not the header.
-- **Body alignment is real now.** `pad` honours each column's `align` for body
-  text (not just the header rule's colons). Numeric columns default to `r`.
+- **Leading padding is capped at three spaces.** `pad` uses each column's
+  `align` but moves excess leading padding to the right, preserving field
+  width. Otherwise Pandoc can parse short cell content as indented code and
+  disable math or other inline markup. Header-rule colons retain document
+  alignment; numeric columns default to `r`. Do not strip user text indentation.
 - **Most functions are internal.** Only `GridTable`, `kable_to_grid`,
   `merge_cells`, `set_attr`, `print.GridTable`, `toString.GridTable` are
   exported. Reach the rest via `devtools::load_all()`.
